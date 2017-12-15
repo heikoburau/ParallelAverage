@@ -28,18 +28,18 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
             database_path = parallel_average_path / "database.json"
             database_path.touch()
 
-            with database_path.open() as f:
-                if database_path.stat().st_size > 0:
+            if database_path.stat().st_size > 0:
+                with database_path.open() as f:
                     for average in json.load(f):
                         if (
                             average["function_name"] == function.__name__ and
                             average["args"] == list(args) and
                             average["kwargs"] == kwargs and
                             average["N_runs"] == N_runs and
-                            (average["N_local_runs"] == N_local_runs if "N_local_runs" in average else True) and
+                            average["N_local_runs"] == N_local_runs and
                             average["average_arrays"] == average_arrays
                         ):
-                            with (parallel_average_path / average["output"]).open() as f_output:
+                            with average["output"].open() as f_output:
                                 output = json.load(f_output)
                                 return transform_json_output(output)
 
@@ -83,10 +83,7 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
                 package_path,
                 f"-t 1-{N_runs}",
             ])
-
             output_path = job_path / "output.json"
-            with output_path.open() as f:
-                output = json.load(f)
 
             with open(database_path, 'r+') as f:
                 if database_path.stat().st_size == 0:
@@ -108,6 +105,8 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
                 json.dump(averages, f)
                 f.truncate()
 
-            return transform_json_output(output)
+            with output_path.open() as f:
+                return transform_json_output(json.load(f))
+
         return wrapper
     return decorator
