@@ -39,7 +39,7 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
                             average["N_local_runs"] == N_local_runs and
                             average["average_arrays"] == average_arrays
                         ):
-                            with average["output"].open() as f_output:
+                            with open(average["output"]) as f_output:
                                 output = json.load(f_output)
                                 return transform_json_output(output)
 
