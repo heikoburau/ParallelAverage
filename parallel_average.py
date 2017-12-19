@@ -20,7 +20,7 @@ def transform_json_output(output):
     return result
 
 
-def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpreter_state=False):
+def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpreter_state=False, ignore_cache=False):
     def decorator(function):
         def wrapper(*args, **kwargs):
             parallel_average_path = Path('.') / ".parallel_average"
@@ -28,7 +28,7 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
             database_path = parallel_average_path / "database.json"
             database_path.touch()
 
-            if database_path.stat().st_size > 0:
+            if not ignore_cache and database_path.stat().st_size > 0:
                 with database_path.open() as f:
                     for average in json.load(f):
                         if (
