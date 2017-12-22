@@ -4,6 +4,7 @@ import json
 import dill
 from subprocess import run
 from pathlib import Path
+from shutil import rmtree
 
 
 def transform_json_output(output):
@@ -20,6 +21,12 @@ def transform_json_output(output):
     return result
 
 
+def averages_match(averageA, averageB):
+    return all(averageA[key] == averageB[key] for key in [
+        "function_name", "args", "kwargs", "N_runs", "N_local_runs", "average_arrays"
+    ])
+
+
 def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpreter_state=False, ignore_cache=False):
     def decorator(function):
         def wrapper(*args, **kwargs):
@@ -31,13 +38,16 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
             if not ignore_cache and database_path.stat().st_size > 0:
                 with database_path.open() as f:
                     for average in json.load(f):
-                        if (
-                            average["function_name"] == function.__name__ and
-                            average["args"] == list(args) and
-                            average["kwargs"] == kwargs and
-                            average["N_runs"] == N_runs and
-                            average["N_local_runs"] == N_local_runs and
-                            average["average_arrays"] == average_arrays
+                        if averages_match(
+                            average,
+                            {
+                                "function_name": function.__name__,
+                                "args": list(args),
+                                "kwargs": kwargs,
+                                "N_runs": N_runs,
+                                "N_local_runs": N_local_runs,
+                                "average_arrays": average_arrays
+                            }
                         ):
                             with open(average["output"]) as f_output:
                                 output = json.load(f_output)
@@ -91,7 +101,7 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
                 else:
                     averages = json.load(f)
 
-                averages.append({
+                new_average = {
                     "function_name": function.__name__,
                     "args": args,
                     "kwargs": kwargs,
@@ -100,7 +110,12 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
                     "average_arrays": average_arrays,
                     "output": str(output_path.resolve()),
                     "job_name": job_name
-                })
+                }
+                if ignore_cache:
+                    for dublicate_average in filter(lambda a: averages_match(a, new_average), averages):
+                        rmtree(str(parallel_average_path / dublicate_average["job_name"]))
+                    averages = [a for a in averages if not averages_match(a, new_average)]
+                averages.append(new_average)
                 f.seek(0)
                 json.dump(averages, f)
                 f.truncate()
