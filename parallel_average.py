@@ -94,28 +94,29 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
             ])
             output_path = job_path / "output.json"
 
+            new_average = {
+                "function_name": function.__name__,
+                "args": list(args),
+                "kwargs": kwargs,
+                "N_total_runs": N_runs * N_local_runs,
+                "average_arrays": average_arrays,
+                "output": str(output_path.resolve()),
+                "job_name": job_name
+            }
+
             with open(database_path, 'r+') as f:
                 if database_path.stat().st_size == 0:
                     averages = []
                 else:
                     averages = json.load(f)
 
-                new_average = {
-                    "function_name": function.__name__,
-                    "args": args,
-                    "kwargs": kwargs,
-                    "N_total_runs": N_runs * N_local_runs,
-                    "average_arrays": average_arrays,
-                    "output": str(output_path.resolve()),
-                    "job_name": job_name
-                }
                 if ignore_cache:
                     for dublicate_average in filter(lambda a: averages_match(a, new_average), averages):
                         rmtree(str(parallel_average_path / dublicate_average["job_name"]))
                     averages = [a for a in averages if not averages_match(a, new_average)]
                 averages.append(new_average)
                 f.seek(0)
-                json.dump(averages, f)
+                json.dump(averages, f, indent=2)
                 f.truncate()
 
             with output_path.open() as f:
