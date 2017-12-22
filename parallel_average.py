@@ -23,7 +23,7 @@ def transform_json_output(output):
 
 def averages_match(averageA, averageB):
     return all(averageA[key] == averageB[key] for key in [
-        "function_name", "args", "kwargs", "N_runs", "N_local_runs", "average_arrays"
+        "function_name", "args", "kwargs", "N_total_runs", "average_arrays"
     ])
 
 
@@ -44,8 +44,7 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
                                 "function_name": function.__name__,
                                 "args": list(args),
                                 "kwargs": kwargs,
-                                "N_runs": N_runs,
-                                "N_local_runs": N_local_runs,
+                                "N_total_runs": N_runs * N_local_runs,
                                 "average_arrays": average_arrays
                             }
                         ):
@@ -105,8 +104,7 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
                     "function_name": function.__name__,
                     "args": args,
                     "kwargs": kwargs,
-                    "N_runs": N_runs,
-                    "N_local_runs": N_local_runs,
+                    "N_total_runs": N_runs * N_local_runs,
                     "average_arrays": average_arrays,
                     "output": str(output_path.resolve()),
                     "job_name": job_name
