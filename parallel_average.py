@@ -2,6 +2,7 @@ import os
 import numpy as np
 import json
 import dill
+import multiprocessing as mp
 from subprocess import run
 from pathlib import Path
 from shutil import rmtree
@@ -27,7 +28,49 @@ def averages_match(averageA, averageB):
     ])
 
 
-def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpreter_state=False, ignore_cache=False):
+def run_average(average, N_runs, job_path, ignore_cache, queue=None):
+    package_path = str(Path(os.path.abspath(__file__)).parent)
+    parallel_average_path = Path('.') / ".parallel_average"
+    database_path = parallel_average_path / "database.json"
+
+    run([
+        f"{package_path}/submit_job.sh",
+        str(job_path.resolve()), 
+        package_path,
+        f"-t 1-{N_runs}",
+    ])
+
+    with open(database_path, 'r+') as f:
+        if database_path.stat().st_size == 0:
+            averages = []
+        else:
+            averages = json.load(f)
+
+        if ignore_cache:
+            for dublicate_average in filter(lambda a: averages_match(a, average), averages):
+                rmtree(str(parallel_average_path / dublicate_average["job_name"]))
+            averages = [a for a in averages if not averages_match(a, average)]
+        averages.append(average)
+        f.seek(0)
+        json.dump(averages, f, indent=2)
+        f.truncate()
+
+    with open(average["output"]) as f:
+        output = transform_json_output(json.load(f))
+        if queue:
+            queue.put(output)
+        else:
+            return output
+
+
+def parallel_average(
+    N_runs, 
+    N_local_runs=1, 
+    average_arrays='all', 
+    save_interpreter_state=False, 
+    ignore_cache=False,
+    async=False
+):
     def decorator(function):
         def wrapper(*args, **kwargs):
             parallel_average_path = Path('.') / ".parallel_average"
@@ -81,19 +124,10 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
             if save_interpreter_state:
                 dill.dump_session(str(input_path / "session.sess"))
 
-            package_path = str(Path(os.path.abspath(__file__)).parent)
-
             with (job_path / "collector_arguments.json").open('w') as f:
                 json.dump(average_arrays, f)
 
-            run([
-                f"{package_path}/submit_job.sh",
-                str(job_path.resolve()), 
-                package_path,
-                f"-t 1-{N_runs}",
-            ])
             output_path = job_path / "output.json"
-
             new_average = {
                 "function_name": function.__name__,
                 "args": list(args),
@@ -104,23 +138,28 @@ def parallel_average(N_runs, N_local_runs=1, average_arrays='all', save_interpre
                 "job_name": job_name
             }
 
-            with open(database_path, 'r+') as f:
-                if database_path.stat().st_size == 0:
-                    averages = []
-                else:
-                    averages = json.load(f)
-
-                if ignore_cache:
-                    for dublicate_average in filter(lambda a: averages_match(a, new_average), averages):
-                        rmtree(str(parallel_average_path / dublicate_average["job_name"]))
-                    averages = [a for a in averages if not averages_match(a, new_average)]
-                averages.append(new_average)
-                f.seek(0)
-                json.dump(averages, f, indent=2)
-                f.truncate()
-
-            with output_path.open() as f:
-                return transform_json_output(json.load(f))
+            if async:
+                queue = mp.Queue()
+                process = mp.Process(
+                    target=run_average, 
+                    args=(new_average, N_runs, job_path, ignore_cache, queue)
+                )
+                process.start()
+                return AsyncResult(process, queue)
+            else:
+                return run_average(new_average, N_runs, job_path, ignore_cache)
 
         return wrapper
     return decorator
+
+
+class AsyncResult:
+    def __init__(self, process, queue):
+        self.process = process
+        self.queue = queue
+
+
+    def resolve(self):
+        output = self.queue.get()
+        self.process.join()
+        return output
