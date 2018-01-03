@@ -40,6 +40,9 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
         f"-t 1-{N_runs}",
     ])
 
+    with open(average["output"]) as f:
+        output = transform_json_output(json.load(f))
+
     with open(database_path, 'r+') as f:
         if database_path.stat().st_size == 0:
             averages = []
@@ -55,12 +58,10 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
         json.dump(averages, f, indent=2)
         f.truncate()
 
-    with open(average["output"]) as f:
-        output = transform_json_output(json.load(f))
-        if queue:
-            queue.put(output)
-        else:
-            return output
+    if queue:
+        queue.put(output)
+    else:
+        return output
 
 
 def parallel_average(
@@ -160,6 +161,16 @@ class AsyncResult:
 
 
     def resolve(self):
-        output = self.queue.get()
+        if hasattr(self, "output"):
+            return self.output
+        self.output = self.queue.get()
         self.process.join()
-        return output
+        return self.output
+
+
+    def __getstate__(self):
+        return False
+
+
+    def __setstate__(self, state):
+        pass
