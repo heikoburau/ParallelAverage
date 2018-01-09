@@ -5,7 +5,6 @@
 # Syntax is Bash with special qsub-instructions that begin with ’#$’. 
 # For more detailed documentation, see 
 #     https://start.pks.mpg.de/dokuwiki/doku.php/getting-started:queueing_system 
-# 
  
  
 # --- Mandatory qsub arguments 
