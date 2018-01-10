@@ -33,11 +33,12 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
 
+    function_name = average["function_name"]
     run([
         f"{package_path}/submit_job.sh",
         str(job_path.resolve()), 
         package_path,
-        f"-t 1-{N_runs}",
+        f"-t 1-{N_runs} -N {function_name}",
     ])
 
     with open(average["output"]) as f:
@@ -51,7 +52,9 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
 
         if ignore_cache:
             for dublicate_average in filter(lambda a: averages_match(a, average), averages):
-                rmtree(str(parallel_average_path / dublicate_average["job_name"]))
+                dublicate_job = parallel_average_path / dublicate_average["job_name"]
+                if dublicate_job.exists():
+                    rmtree(str(dublicate_job))
             averages = [a for a in averages if not averages_match(a, average)]
         averages.append(average)
         f.seek(0)
