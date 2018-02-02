@@ -4,6 +4,7 @@ import json
 import dill
 from collections import defaultdict
 
+
 task_id = int(sys.argv[1])
 
 
@@ -38,7 +39,7 @@ for n in range(N_local_runs):
                 {
                     "failed": True,
                     "run_id": run_id,
-                    "error message": str(e)
+                    "error message": type(e).__name__ + ": " + str(e)
                 },
                 f
             )
