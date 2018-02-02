@@ -6,8 +6,10 @@ import multiprocessing as mp
 from subprocess import run
 from pathlib import Path
 from shutil import rmtree
-import glob
-
+try:
+    import objectpath
+except ImportError:
+    pass
 
 def transform_json_output(output):
     is_numpy_array = output["is_numpy_array"]
@@ -50,7 +52,7 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
     if failed_tasks:
         failed_task = failed_tasks[0]
         raise RuntimeError(
-            f"{len(failed_tasks)} tasks failed! Error message of task {failed_task['task_id']} with run_id = {failed_task['run_id']}:\n" +
+            f"{len(failed_tasks)}/{N_runs} tasks failed! Error message of task {failed_task['task_id']} with run_id = {failed_task['run_id']}:\n" +
             failed_task["error message"]
         )
 
@@ -204,3 +206,34 @@ def cleanup():
 
     for bad_job in bad_jobs:
         rmtree(str(parallel_average_path / bad_job))
+
+
+class Database:
+    def __init__(self):
+        self.refresh()
+
+    def refresh(self):
+        database_path = Path('.') / ".parallel_average" / "database.json"
+        if not database_path.exists() or database_path.stat().st_size == 0:
+            self.db = None
+            return
+
+        with database_path.open() as f:
+            self.db = json.load(f)
+
+    @property
+    def function_names(self):
+        if self.db is None:
+            return []
+
+        return sorted(list({average["function_name"] for average in self.db}))
+
+    def query(self, query_string):
+        if not "objectpath" in globals():
+            raise ModuleNotFoundError("Please install the `objectpath` library in order to use this function.")
+
+        tree = objectpath.Tree(self.db)
+        return list(tree.execute(query_string))
+
+
+database = Database()

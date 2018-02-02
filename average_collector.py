@@ -50,14 +50,15 @@ for task_dir in task_dirs:
             result[i] = r
     
 
-result = {i: (r / num_tasks).tolist() if must_average(i) else r for i, r in result.items()}
-result = [result[i] for i in sorted(result)]
-if not isinstance(is_numpy_array, (tuple, list)):
-    result = result[0]
+if len(result) > 0:
+    result = {i: (r / num_tasks).tolist() if must_average(i) else r for i, r in result.items()}
+    result = [result[i] for i in sorted(result)]
+    if not isinstance(is_numpy_array, (tuple, list)):
+        result = result[0]
 
 output = {
     "failed_tasks": failed_tasks,
-    "is_numpy_array": is_numpy_array,
+    "is_numpy_array": is_numpy_array if "is_numpy_array" is globals() else None,
     "result": result
 }
 
