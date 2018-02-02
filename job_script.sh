@@ -10,7 +10,8 @@
  
 # --- Mandatory qsub arguments 
 # Hardware requirements. 
-#$ -l h_rss=256M,h_fsize=10M,h_cpu=12:00:00,hw=x86_64 
+#$ -l h_rss=256M,h_fsize=10M,h_cpu=12:00:00,hw=x86_64
+#$ -j n 
  
 # --- Job Execution 
 # For faster disk access copy files to /scratch first. 

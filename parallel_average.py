@@ -6,6 +6,7 @@ import multiprocessing as mp
 from subprocess import run
 from pathlib import Path
 from shutil import rmtree
+import glob
 
 
 def transform_json_output(output):
@@ -28,6 +29,10 @@ def averages_match(averageA, averageB):
     ])
 
 
+def get_error_message(job_path, failed_task):
+    return open(next(iter(glob.glob(str(job_path) + f"/*.e*.{failed_task}")))).read()
+
+
 def run_average(average, N_runs, job_path, ignore_cache, queue=None):
     package_path = str(Path(os.path.abspath(__file__)).parent)
     parallel_average_path = Path('.') / ".parallel_average"
@@ -36,13 +41,21 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
     function_name = average["function_name"]
     run([
         f"{package_path}/submit_job.sh",
-        str(job_path.resolve()), 
+        str(job_path.resolve()),
         package_path,
         f"-t 1-{N_runs} -N {function_name}",
     ])
 
     with open(average["output"]) as f:
-        output = transform_json_output(json.load(f))
+        json_output = json.load(f)
+        output = transform_json_output(json_output)
+        failed_tasks = json_output["failed_tasks"]
+
+    if failed_tasks:
+        raise RuntimeError(
+            f"{len(failed_tasks)} jobs failed! error message of job #{failed_tasks[0]}:\n" +
+            get_error_message(job_path, failed_tasks[0])
+        )
 
     with open(database_path, 'r+') as f:
         if database_path.stat().st_size == 0:
