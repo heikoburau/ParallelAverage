@@ -29,10 +29,6 @@ def averages_match(averageA, averageB):
     ])
 
 
-def get_error_message(job_path, failed_task):
-    return open(next(iter(glob.glob(str(job_path) + f"/*.e*.{failed_task}")))).read()
-
-
 def run_average(average, N_runs, job_path, ignore_cache, queue=None):
     package_path = str(Path(os.path.abspath(__file__)).parent)
     parallel_average_path = Path('.') / ".parallel_average"
