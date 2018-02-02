@@ -26,10 +26,14 @@ for task_dir in task_dirs:
     task_id = int(str(task_dir))
     task_output_file = task_dir / f"output_{task_id}.json"
 
-    try:
-        output = json.load(open(task_output_file, 'r'))
-    except FileNotFoundError:
-        failed_tasks.append(task_id)
+    
+    output = json.load(open(task_output_file, 'r'))
+    if "failed" in output:
+        failed_tasks.append({
+            "task_id": task_id,
+            "run_id": output["run_id"],
+            "error message": output["error message"]
+        })
         continue
 
     global is_numpy_array

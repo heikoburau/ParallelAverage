@@ -52,9 +52,10 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
         failed_tasks = json_output["failed_tasks"]
 
     if failed_tasks:
+        failed_task = failed_tasks[0]
         raise RuntimeError(
-            f"{len(failed_tasks)} jobs failed! error message of job #{failed_tasks[0]}:\n" +
-            get_error_message(job_path, failed_tasks[0])
+            f"{len(failed_tasks)} tasks failed! Error message of task {failed_task['task_id']} with run_id = {failed_task['run_id']}:\n" +
+            failed_task["error message"]
         )
 
     with open(database_path, 'r+') as f:

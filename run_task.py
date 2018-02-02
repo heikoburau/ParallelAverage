@@ -28,8 +28,21 @@ if save_interpreter_state:
 avg_result = defaultdict(lambda: 0)
 
 for n in range(N_local_runs):
-    kwargs["run_id"] = task_id * N_local_runs + n
-    result = function(*args, **kwargs)
+    run_id = task_id * N_local_runs + n
+    kwargs["run_id"] = run_id
+    try:
+        result = function(*args, **kwargs)
+    except Exception as e:
+        with open(f"output_{task_id}.json", 'a') as f:
+            json.dump(
+                {
+                    "failed": True,
+                    "run_id": run_id,
+                    "error message": str(e)
+                },
+                f
+            )
+        raise e
 
     if isinstance(result, np.ndarray):
         if average_arrays == 'all' or 0 in average_arrays:
