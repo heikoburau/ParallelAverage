@@ -20,10 +20,17 @@ def must_average(index):
 
 must_average = lambda i: average_arrays == 'all' or i in average_arrays
 
+failed_tasks = []
+
 for task_dir in task_dirs:
     task_id = int(str(task_dir))
     task_output_file = task_dir / f"output_{task_id}.json"
-    output = json.load(open(task_output_file, 'r'))
+
+    try:
+        output = json.load(open(task_output_file, 'r'))
+    except FileNotFoundError:
+        failed_tasks.append(task_id)
+        continue
 
     global is_numpy_array
     is_numpy_array = output["is_numpy_array"]
@@ -45,6 +52,7 @@ if not isinstance(is_numpy_array, (tuple, list)):
     result = result[0]
 
 output = {
+    "failed_tasks": failed_tasks,
     "is_numpy_array": is_numpy_array,
     "result": result
 }
