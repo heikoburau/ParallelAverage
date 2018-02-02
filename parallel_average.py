@@ -187,3 +187,20 @@ class AsyncResult:
 
     def __setstate__(self, state):
         pass
+
+
+def cleanup():
+    parallel_average_path = Path('.') / ".parallel_average"
+    database_path = parallel_average_path / "database.json"
+    if not database_path.exists() or database_path.stat().st_size == 0:
+        return
+    
+    with open(database_path) as f:
+        database_json = json.load(f)
+
+    database_jobs = {average["job_name"] for average in database_json}
+    existing_jobs = {job.name for job in parallel_average_path.iterdir() if job.is_dir()}
+    bad_jobs = existing_jobs - database_jobs
+
+    for bad_job in bad_jobs:
+        rmtree(str(parallel_average_path / bad_job))
