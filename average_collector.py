@@ -58,7 +58,7 @@ if len(result) > 0:
 
 output = {
     "failed_tasks": failed_tasks,
-    "is_numpy_array": is_numpy_array if "is_numpy_array" is globals() else None,
+    "is_numpy_array": is_numpy_array if "is_numpy_array" in globals() else None,
     "result": result
 }
 

@@ -229,6 +229,9 @@ class Database:
         return sorted(list({average["function_name"] for average in self.db}))
 
     def query(self, query_string):
+        if self.db is None:
+            return []
+            
         if not "objectpath" in globals():
             raise ModuleNotFoundError("Please install the `objectpath` library in order to use this function.")
 
