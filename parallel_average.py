@@ -28,11 +28,11 @@ def transform_json_output(output):
 
 def averages_match(averageA, averageB):
     return all(averageA[key] == averageB[key] for key in [
-        "function_name", "args", "kwargs", "N_total_runs", "average_arrays"
+        "function_name", "args", "kwargs", "N_runs", "average_arrays"
     ])
 
 
-def run_average(average, N_runs, job_path, ignore_cache, queue=None):
+def run_average(average, N_tasks, job_path, ignore_cache, queue=None):
     package_path = str(Path(os.path.abspath(__file__)).parent)
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
@@ -42,7 +42,7 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
         f"{package_path}/submit_job.sh",
         str(job_path.resolve()),
         package_path,
-        f"-t 1-{N_runs} -N {function_name}",
+        f"-t 1-{N_tasks} -N {function_name}",
     ])
 
     with open(average["output"]) as f:
@@ -53,7 +53,7 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
     if failed_tasks:
         failed_task = failed_tasks[0]
         raise RuntimeError(
-            f"{len(failed_tasks)}/{N_runs} tasks failed! Error message of task {failed_task['task_id']} with run_id = {failed_task['run_id']}:\n\n" +
+            f"{len(failed_tasks)} / {N_tasks} tasks failed!\nError message of task {failed_task['task_id']} with run_id = {failed_task['run_id']}:\n\n" +
             failed_task["error message"]
         )
 
@@ -83,7 +83,7 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
 
 def parallel_average(
     N_runs,
-    N_local_runs=1,
+    N_tasks,
     average_arrays='all',
     save_interpreter_state=False,
     ignore_cache=False,
@@ -107,7 +107,7 @@ def parallel_average(
                             "function_name": function.__name__,
                             "args": list(args),
                             "kwargs": kwargs,
-                            "N_total_runs": N_runs * N_local_runs,
+                            "N_runs": N_runs,
                             "average_arrays": average_arrays
                         }
                     ):
@@ -127,7 +127,8 @@ def parallel_average(
             with (input_path / "run_task_arguments.json").open('w') as f:
                 json.dump(
                     {
-                        "N_local_runs": N_local_runs,
+                        "N_runs": N_runs,
+                        "N_tasks": N_tasks,
                         "average_arrays": average_arrays,
                         "save_interpreter_state": save_interpreter_state
                     },
@@ -152,7 +153,7 @@ def parallel_average(
                 "function_name": function.__name__,
                 "args": list(args),
                 "kwargs": kwargs,
-                "N_total_runs": N_runs * N_local_runs,
+                "N_runs": N_runs,
                 "average_arrays": average_arrays,
                 "output": str(output_path.resolve()),
                 "job_name": job_name
@@ -162,12 +163,12 @@ def parallel_average(
                 queue = mp.Queue()
                 process = mp.Process(
                     target=run_average,
-                    args=(new_average, N_runs, job_path, ignore_cache, queue)
+                    args=(new_average, N_tasks, job_path, ignore_cache, queue)
                 )
                 process.start()
                 return AsyncResult(process, queue)
             else:
-                return run_average(new_average, N_runs, job_path, ignore_cache)
+                return run_average(new_average, N_tasks, job_path, ignore_cache)
 
         return wrapper
     return decorator

@@ -10,7 +10,8 @@ task_id = int(sys.argv[1])
 
 with open("../input/run_task_arguments.json", 'r') as f:
     parameters = json.load(f)
-    N_local_runs = parameters["N_local_runs"]
+    N_runs = parameters["N_runs"]
+    N_tasks = parameters["N_tasks"]
     average_arrays = parameters["average_arrays"]
     save_interpreter_state = parameters["save_interpreter_state"]
 
@@ -28,8 +29,12 @@ if save_interpreter_state:
 
 avg_result = defaultdict(lambda: 0)
 
+N_local_runs = N_runs // N_tasks
+if N_runs % N_tasks != 0:
+    N_local_runs += 1 if task_id < N_runs % N_tasks else 0
+
 for n in range(N_local_runs):
-    run_id = task_id * N_local_runs + n
+    run_id = n * N_tasks + task_id
     kwargs["run_id"] = run_id
     try:
         result = function(*args, **kwargs)
