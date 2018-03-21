@@ -6,6 +6,7 @@ import multiprocessing as mp
 from subprocess import run
 from pathlib import Path
 from shutil import rmtree
+from .simpleflock import SimpleFlock
 try:
     import objectpath
 except ImportError:
@@ -52,26 +53,27 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
     if failed_tasks:
         failed_task = failed_tasks[0]
         raise RuntimeError(
-            f"{len(failed_tasks)}/{N_runs} tasks failed! Error message of task {failed_task['task_id']} with run_id = {failed_task['run_id']}:\n" +
+            f"{len(failed_tasks)}/{N_runs} tasks failed! Error message of task {failed_task['task_id']} with run_id = {failed_task['run_id']}:\n\n" +
             failed_task["error message"]
         )
 
-    with open(database_path, 'r+') as f:
-        if database_path.stat().st_size == 0:
-            averages = []
-        else:
-            averages = json.load(f)
+    with SimpleFlock(str(parallel_average_path / "dblock")):
+        with open(database_path, 'r+') as f:
+            if database_path.stat().st_size == 0:
+                averages = []
+            else:
+                averages = json.load(f)
 
-        if ignore_cache:
-            for dublicate_average in filter(lambda a: averages_match(a, average), averages):
-                dublicate_job = parallel_average_path / dublicate_average["job_name"]
-                if dublicate_job.exists():
-                    rmtree(str(dublicate_job))
-            averages = [a for a in averages if not averages_match(a, average)]
-        averages.append(average)
-        f.seek(0)
-        json.dump(averages, f, indent=2)
-        f.truncate()
+            if ignore_cache:
+                for dublicate_average in filter(lambda a: averages_match(a, average), averages):
+                    dublicate_job = parallel_average_path / dublicate_average["job_name"]
+                    if dublicate_job.exists():
+                        rmtree(str(dublicate_job))
+                averages = [a for a in averages if not averages_match(a, average)]
+            averages.append(average)
+            f.seek(0)
+            json.dump(averages, f, indent=2)
+            f.truncate()
 
     if queue:
         queue.put(output)
@@ -80,10 +82,10 @@ def run_average(average, N_runs, job_path, ignore_cache, queue=None):
 
 
 def parallel_average(
-    N_runs, 
-    N_local_runs=1, 
-    average_arrays='all', 
-    save_interpreter_state=False, 
+    N_runs,
+    N_local_runs=1,
+    average_arrays='all',
+    save_interpreter_state=False,
     ignore_cache=False,
     async=False
 ):
@@ -95,21 +97,23 @@ def parallel_average(
             database_path.touch()
 
             if not ignore_cache and database_path.stat().st_size > 0:
-                with database_path.open() as f:
-                    for average in json.load(f):
-                        if averages_match(
-                            average,
-                            {
-                                "function_name": function.__name__,
-                                "args": list(args),
-                                "kwargs": kwargs,
-                                "N_total_runs": N_runs * N_local_runs,
-                                "average_arrays": average_arrays
-                            }
-                        ):
-                            with open(average["output"]) as f_output:
-                                output = json.load(f_output)
-                                return transform_json_output(output)
+                with SimpleFlock(str(parallel_average_path / "dblock")):
+                    with database_path.open() as f:
+                        averages = json.load(f)
+                for average in averages:
+                    if averages_match(
+                        average,
+                        {
+                            "function_name": function.__name__,
+                            "args": list(args),
+                            "kwargs": kwargs,
+                            "N_total_runs": N_runs * N_local_runs,
+                            "average_arrays": average_arrays
+                        }
+                    ):
+                        with open(average["output"]) as f_output:
+                            output = json.load(f_output)
+                            return transform_json_output(output)
 
             job_name = str(
                 int(hash(function.__name__) + id(args) + id(kwargs)) % 100000000
@@ -126,7 +130,7 @@ def parallel_average(
                         "N_local_runs": N_local_runs,
                         "average_arrays": average_arrays,
                         "save_interpreter_state": save_interpreter_state
-                    }, 
+                    },
                     f
                 )
 
@@ -157,7 +161,7 @@ def parallel_average(
             if async:
                 queue = mp.Queue()
                 process = mp.Process(
-                    target=run_average, 
+                    target=run_average,
                     args=(new_average, N_runs, job_path, ignore_cache, queue)
                 )
                 process.start()
@@ -196,7 +200,7 @@ def cleanup():
     database_path = parallel_average_path / "database.json"
     if not database_path.exists() or database_path.stat().st_size == 0:
         return
-    
+
     with open(database_path) as f:
         database_json = json.load(f)
 
@@ -231,7 +235,7 @@ class Database:
     def query(self, query_string):
         if self.db is None:
             return []
-            
+
         if not "objectpath" in globals():
             raise ModuleNotFoundError("Please install the `objectpath` library in order to use this function.")
 
