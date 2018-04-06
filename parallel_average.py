@@ -12,6 +12,7 @@ try:
 except ImportError:
     pass
 
+
 def transform_json_output(output):
     is_numpy_array = output["is_numpy_array"]
     result = output["result"]
@@ -100,13 +101,17 @@ def parallel_average(
                 with SimpleFlock(str(parallel_average_path / "dblock")):
                     with database_path.open() as f:
                         averages = json.load(f)
+
+                cleaned_args = json.loads(json.dumps(args))
+                cleaned_kwargs = json.loads(json.dumps(kwargs))
+
                 for average in averages:
                     if averages_match(
                         average,
                         {
                             "function_name": function.__name__,
-                            "args": list(args),
-                            "kwargs": kwargs,
+                            "args": cleaned_args,
+                            "kwargs": cleaned_kwargs,
                             "N_runs": N_runs,
                             "average_arrays": average_arrays
                         }
@@ -179,7 +184,6 @@ class AsyncResult:
         self.process = process
         self.queue = queue
 
-
     def resolve(self):
         if hasattr(self, "output"):
             return self.output
@@ -187,10 +191,8 @@ class AsyncResult:
         self.process.join()
         return self.output
 
-
     def __getstate__(self):
         return False
-
 
     def __setstate__(self, state):
         pass
@@ -237,7 +239,7 @@ class Database:
         if self.db is None:
             return []
 
-        if not "objectpath" in globals():
+        if "objectpath" not in globals():
             raise ModuleNotFoundError("Please install the `objectpath` library in order to use this function.")
 
         tree = objectpath.Tree(self.db)
