@@ -17,7 +17,7 @@ except ImportError:
 
 def averages_match(averageA, averageB):
     return all(averageA[key] == averageB[key] for key in [
-        "function_name", "args", "kwargs", "N_runs", "average_arrays"
+        "function_name", "args", "kwargs", "N_runs", "average_arrays", "compute_std"
     ])
 
 
@@ -79,6 +79,7 @@ def parallel_average(
     N_runs,
     N_tasks,
     average_arrays='all',
+    compute_std=None,
     save_interpreter_state=False,
     ignore_cache=False,
     async=False,
@@ -107,7 +108,8 @@ def parallel_average(
                             "args": cleaned_args,
                             "kwargs": cleaned_kwargs,
                             "N_runs": N_runs,
-                            "average_arrays": average_arrays
+                            "average_arrays": average_arrays,
+                            "compute_std": compute_std
                         }
                     ):
                         if "warning message" in average:
@@ -131,6 +133,7 @@ def parallel_average(
                         "N_runs": N_runs,
                         "N_tasks": N_tasks,
                         "average_arrays": average_arrays,
+                        "compute_std": compute_std,
                         "save_interpreter_state": save_interpreter_state
                     },
                     f
@@ -156,6 +159,7 @@ def parallel_average(
                 "kwargs": kwargs,
                 "N_runs": N_runs,
                 "average_arrays": average_arrays,
+                "compute_std": compute_std,
                 "output": str(output_path.resolve()),
                 "job_name": job_name
             }
