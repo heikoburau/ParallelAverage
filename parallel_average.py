@@ -6,6 +6,7 @@ import multiprocessing as mp
 from subprocess import run
 from pathlib import Path
 from shutil import rmtree
+from warnings import warn
 from .simpleflock import SimpleFlock
 try:
     import objectpath
@@ -33,7 +34,7 @@ def averages_match(averageA, averageB):
     ])
 
 
-def run_average(average, N_tasks, job_path, ignore_cache, queue=None):
+def run_average(average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance, queue=None):
     package_path = str(Path(os.path.abspath(__file__)).parent)
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
@@ -53,10 +54,15 @@ def run_average(average, N_tasks, job_path, ignore_cache, queue=None):
 
     if failed_tasks:
         failed_task = failed_tasks[0]
-        raise RuntimeError(
+        message_failed = (
             f"{len(failed_tasks)} / {N_tasks} tasks failed!\nError message of task {failed_task['task_id']} with run_id = {failed_task['run_id']}:\n\n" +
             failed_task["error message"]
         )
+        if len(failed_tasks) > failed_tasks_tolerance:
+            raise RuntimeError(message_failed)
+        else:
+            warn(message_failed)
+            average["warning message"] = message_failed
 
     with SimpleFlock(str(parallel_average_path / "dblock")):
         with open(database_path, 'r+') as f:
@@ -88,7 +94,8 @@ def parallel_average(
     average_arrays='all',
     save_interpreter_state=False,
     ignore_cache=False,
-    async=False
+    async=False,
+    failed_tasks_tolerance=0
 ):
     def decorator(function):
         def wrapper(*args, **kwargs):
@@ -116,6 +123,8 @@ def parallel_average(
                             "average_arrays": average_arrays
                         }
                     ):
+                        if "warning message" in average:
+                            warn(average["warning message"])
                         with open(average["output"]) as f_output:
                             output = json.load(f_output)
                             return transform_json_output(output)
@@ -168,12 +177,12 @@ def parallel_average(
                 queue = mp.Queue()
                 process = mp.Process(
                     target=run_average,
-                    args=(new_average, N_tasks, job_path, ignore_cache, queue)
+                    args=(new_average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance, queue)
                 )
                 process.start()
                 return AsyncResult(process, queue)
             else:
-                return run_average(new_average, N_tasks, job_path, ignore_cache)
+                return run_average(new_average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance)
 
         return wrapper
     return decorator
