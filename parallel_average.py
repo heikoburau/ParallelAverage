@@ -8,24 +8,11 @@ from pathlib import Path
 from shutil import rmtree
 from warnings import warn
 from .simpleflock import SimpleFlock
+from .json_numpy import NumpyDecoder
 try:
     import objectpath
 except ImportError:
     pass
-
-
-def transform_json_output(output):
-    is_numpy_array = output["is_numpy_array"]
-    result = output["result"]
-
-    if is_numpy_array is True:
-        return np.array(result)
-    if isinstance(is_numpy_array, (list, tuple)):
-        return [
-            np.array(r) if is_npa else r
-            for r, is_npa in zip(result, is_numpy_array)
-        ]
-    return result
 
 
 def averages_match(averageA, averageB):
@@ -48,8 +35,8 @@ def run_average(average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance
     ])
 
     with open(average["output"]) as f:
-        json_output = json.load(f)
-        output = transform_json_output(json_output)
+        json_output = json.load(f, cls=NumpyDecoder)
+        output = json_output["result"]
         failed_tasks = json_output["failed_tasks"]
 
     if failed_tasks:
@@ -126,8 +113,8 @@ def parallel_average(
                         if "warning message" in average:
                             warn(average["warning message"])
                         with open(average["output"]) as f_output:
-                            output = json.load(f_output)
-                            return transform_json_output(output)
+                            output = json.load(f_output, cls=NumpyDecoder)
+                            return output["result"]
 
             job_name = str(
                 int(hash(function.__name__) + id(args) + id(kwargs)) % 100000000

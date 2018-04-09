@@ -3,6 +3,7 @@ import numpy as np
 import json
 import dill
 from collections import defaultdict
+from json_numpy import NumpyEncoder
 
 
 task_id = int(sys.argv[1])
@@ -27,7 +28,7 @@ with open("../input/kwargs.d", 'rb') as f:
 if save_interpreter_state:
     dill.load_session("../input/session.sess")
 
-avg_result = defaultdict(lambda: 0)
+task_result = defaultdict(lambda: 0)
 
 N_local_runs = N_runs // N_tasks
 if N_runs % N_tasks != 0:
@@ -50,41 +51,22 @@ for n in range(N_local_runs):
             )
         raise e
 
-    if isinstance(result, np.ndarray):
-        if average_arrays == 'all' or 0 in average_arrays:
-            avg_result[0] += result / N_local_runs
-        else:
-            avg_result[0] = result
-    elif isinstance(result, (tuple, list)):
-        for i, r in enumerate(result):
-            if isinstance(r, np.ndarray):
-                if average_arrays == 'all' or i in average_arrays:
-                    avg_result[i] += r / N_local_runs
-                else:
-                    avg_result[i] = r
-    else:
-        avg_result[0] = result
+    if not isinstance(result, (list, tuple)):
+        result = [result]
 
+    for i, r in enumerate(result):
+        if isinstance(r, np.ndarray):
+            if average_arrays == 'all' or i in average_arrays:
+                task_result[i] += r / N_local_runs
+                continue
 
-result = [avg_result[i] for i in sorted(avg_result)]
-if len(result) == 1:
-    result = result[0]
+        task_result[i] = r
 
-
-if isinstance(result, np.ndarray):
-    is_numpy_array = True
-    result = result.tolist()
-elif isinstance(result, (tuple, list)):
-    is_numpy_array = [isinstance(r, np.ndarray) for r in result]
-    result = [r.tolist() if isinstance(r, np.ndarray) else r for r in result]
-else:
-    is_numpy_array = False
+task_result = [task_result[i] for i in sorted(task_result)]
 
 with open(f"output_{task_id}.json", 'a') as f:
     json.dump(
-        {
-            "is_numpy_array": is_numpy_array,
-            "result": result
-        },
-        f
+        {"task_result": task_result},
+        f,
+        cls=NumpyEncoder
     )
