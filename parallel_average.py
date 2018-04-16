@@ -8,7 +8,7 @@ from pathlib import Path
 from shutil import rmtree
 from warnings import warn
 from .simpleflock import SimpleFlock
-from .json_numpy import NumpyDecoder
+from .json_numpy import NumpyEncoder, NumpyDecoder
 try:
     import objectpath
 except ImportError:
@@ -97,8 +97,8 @@ def parallel_average(
                     with database_path.open() as f:
                         averages = json.load(f)
 
-                cleaned_args = json.loads(json.dumps(args))
-                cleaned_kwargs = json.loads(json.dumps(kwargs))
+                cleaned_args = json.loads(json.dumps(args, cls=NumpyEncoder), cls=NumpyDecoder)
+                cleaned_kwargs = json.loads(json.dumps(kwargs, cls=NumpyEncoder), cls=NumpyDecoder)
 
                 for average in averages:
                     if averages_match(
