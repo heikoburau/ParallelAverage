@@ -56,7 +56,7 @@ def run_average(average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance
             if database_path.stat().st_size == 0:
                 averages = []
             else:
-                averages = json.load(f)
+                averages = json.load(f, cls=NumpyDecoder)
 
             if ignore_cache:
                 for dublicate_average in filter(lambda a: averages_match(a, average), averages):
@@ -66,7 +66,7 @@ def run_average(average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance
                 averages = [a for a in averages if not averages_match(a, average)]
             averages.append(average)
             f.seek(0)
-            json.dump(averages, f, indent=2)
+            json.dump(averages, f, indent=2, cls=NumpyEncoder)
             f.truncate()
 
     if queue:
@@ -95,7 +95,7 @@ def parallel_average(
             if not ignore_cache and database_path.stat().st_size > 0:
                 with SimpleFlock(str(parallel_average_path / "dblock")):
                     with database_path.open() as f:
-                        averages = json.load(f)
+                        averages = json.load(f, cls=NumpyDecoder)
 
                 cleaned_args = json.loads(json.dumps(args, cls=NumpyEncoder), cls=NumpyDecoder)
                 cleaned_kwargs = json.loads(json.dumps(kwargs, cls=NumpyEncoder), cls=NumpyDecoder)
@@ -150,7 +150,7 @@ def parallel_average(
                 dill.dump_session(str(input_path / "session.sess"))
 
             with (job_path / "collector_arguments.json").open('w') as f:
-                json.dump(average_arrays, f)
+                json.dump(average_arrays, f, cls=NumpyEncoder)
 
             output_path = job_path / "output.json"
             new_average = {
@@ -205,7 +205,7 @@ def cleanup():
         return
 
     with open(database_path) as f:
-        database_json = json.load(f)
+        database_json = json.load(f, cls=NumpyDecoder)
 
     database_jobs = {average["job_name"] for average in database_json}
     existing_jobs = {job.name for job in parallel_average_path.iterdir() if job.is_dir()}
@@ -226,7 +226,7 @@ class Database:
             return
 
         with database_path.open() as f:
-            self.db = json.load(f)
+            self.db = json.load(f, cls=NumpyDecoder)
 
     @property
     def function_names(self):
