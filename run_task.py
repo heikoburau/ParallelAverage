@@ -34,10 +34,10 @@ task_square_result = defaultdict(lambda: 0)
 
 N_local_runs = N_runs // N_tasks
 if N_runs % N_tasks != 0:
-    N_local_runs += 1 if task_id < N_runs % N_tasks else 0
+    N_local_runs += 1 if (task_id - 1) < N_runs % N_tasks else 0
 
 for n in range(N_local_runs):
-    run_id = n * N_tasks + task_id
+    run_id = n * N_tasks + (task_id - 1)
     kwargs["run_id"] = run_id
     try:
         result = function(*args, **kwargs)
@@ -57,9 +57,8 @@ for n in range(N_local_runs):
         result = [result]
 
     for i, r in enumerate(result):
-        if isinstance(r, np.ndarray):
-            if average_arrays == 'all' or i in average_arrays:
-                task_result[i] += r / N_local_runs
+        if isinstance(r, np.ndarray) and (average_arrays == 'all' or i in average_arrays):
+            task_result[i] += r / N_local_runs
             if compute_std == 'all' or (compute_std and i in compute_std):
                 task_square_result[i] += r**2 / N_local_runs
             continue
