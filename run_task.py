@@ -71,8 +71,10 @@ with open(f"output_{task_id}.json", 'a') as f:
     json.dump(
         {
             "task_result": task_result,
-            "task_square_result": dict(task_square_result)
+            "task_square_result": dict(task_square_result),
+            "N_local_runs": N_local_runs
         },
         f,
+        indent=2,
         cls=NumpyEncoder
     )

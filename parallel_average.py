@@ -97,8 +97,14 @@ def parallel_average(
                     with database_path.open() as f:
                         averages = json.load(f, cls=NumpyDecoder)
 
-                cleaned_args = json.loads(json.dumps(args, cls=NumpyEncoder), cls=NumpyDecoder)
-                cleaned_kwargs = json.loads(json.dumps(kwargs, cls=NumpyEncoder), cls=NumpyDecoder)
+                cleaned_args = json.loads(
+                    json.dumps(args, cls=NumpyEncoder),
+                    cls=NumpyDecoder
+                )
+                cleaned_kwargs = json.loads(
+                    json.dumps(kwargs, cls=NumpyEncoder),
+                    cls=NumpyDecoder
+                )
 
                 for average in averages:
                     if averages_match(

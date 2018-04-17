@@ -26,10 +26,10 @@ class SimpleFlock:
             elif self._timeout is not None and time.time() > (start_lock_search + self._timeout):
                # Exceeded the user-specified timeout.
                raise
-         
+
          # TODO It would be nice to avoid an arbitrary sleep here, but spinning
          # without a delay is also undesirable.
-         time.sleep(0.1)
+         time.sleep(0.5)
 
    def __exit__(self, *args):
       fcntl.flock(self._fd, fcntl.LOCK_UN)

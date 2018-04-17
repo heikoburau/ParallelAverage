@@ -16,13 +16,21 @@ square_result = defaultdict(lambda: 0)
 to_be_averaged = lambda i: average_arrays == 'all' or i in average_arrays
 
 failed_tasks = []
-num_successful_tasks = 0
+N_total_runs = 0
 
 for task_dir in task_dirs:
     task_id = int(str(task_dir))
     task_output_file = task_dir / f"output_{task_id}.json"
 
-    output = json.load(open(task_output_file, 'r'), cls=NumpyDecoder)
+    try:
+        output = json.load(open(task_output_file, 'r'), cls=NumpyDecoder)
+    except FileNotFoundError:
+        failed_tasks.append({
+            "task_id": task_id,
+            "run_id": -1,
+            "error message": f"{task_output_file} not found."
+        })
+        continue
     if "failed" in output:
         failed_tasks.append({
             "task_id": task_id,
@@ -33,20 +41,20 @@ for task_dir in task_dirs:
 
     for i, r in enumerate(output["task_result"]):
         if to_be_averaged(i):
-            result[i] += r
+            result[i] += r * output["N_local_runs"]
         else:
             result[i] = r
 
     for i, r2 in output["task_square_result"].items():
         i = int(i)
-        square_result[i] += r2
+        square_result[i] += r2 * output["N_local_runs"]
 
-    num_successful_tasks += 1
+    N_total_runs += output["N_local_runs"]
 
-result = {i: r / num_successful_tasks if to_be_averaged(i) else r for i, r in result.items()}
+result = {i: r / N_total_runs if to_be_averaged(i) else r for i, r in result.items()}
 result = [result[i] for i in sorted(result)]
 
-square_result = {i: r2 / num_successful_tasks for i, r2 in square_result.items()}
+square_result = {i: r2 / N_total_runs for i, r2 in square_result.items()}
 for i, r2 in square_result.items():
     result[i] = [result[i], np.sqrt(r2 - result[i]**2)]
 
