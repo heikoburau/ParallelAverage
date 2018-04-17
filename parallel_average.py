@@ -83,7 +83,8 @@ def parallel_average(
     save_interpreter_state=False,
     ignore_cache=False,
     async=False,
-    failed_tasks_tolerance=0
+    failed_tasks_tolerance=0,
+    dynamic_load_balancing=False
 ):
     def decorator(function):
         def wrapper(*args, **kwargs):
@@ -133,6 +134,15 @@ def parallel_average(
             input_path = job_path / "input"
             input_path.mkdir(parents=True, exist_ok=True)
 
+            if dynamic_load_balancing:
+                N_static_runs = N_runs // 4
+                N_dynamic_runs = N_runs - N_static_runs
+                chunk_size = N_dynamic_runs // 3 // N_tasks
+                dynamic_slices = list(range(N_static_runs, N_runs, chunk_size)) + [N_runs]
+                chunks = list(zip(dynamic_slices[:-1], dynamic_slices[1:]))
+                with (input_path / "chunks.json").open('w') as f:
+                    json.dump(chunks, f)
+
             with (input_path / "run_task_arguments.json").open('w') as f:
                 json.dump(
                     {
@@ -140,7 +150,9 @@ def parallel_average(
                         "N_tasks": N_tasks,
                         "average_arrays": average_arrays,
                         "compute_std": compute_std,
-                        "save_interpreter_state": save_interpreter_state
+                        "save_interpreter_state": save_interpreter_state,
+                        "dynamic_load_balancing": dynamic_load_balancing,
+                        "N_static_runs": N_static_runs if "N_static_runs" in locals() else 0
                     },
                     f
                 )
