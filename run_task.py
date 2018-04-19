@@ -44,16 +44,13 @@ def run_ids():
             with SimpleFlock("../input/chunks_lock"):
                 with open("../input/chunks.json", 'r+') as f:
                     chunks = json.load(f)
-                    if chunks:
-                        chunk = chunks.pop()
-                        f.seek(0)
-                        json.dump(chunks, f)
-                        f.truncate()
-                    else:
-                        chunk = None
+                    if not chunks:
+                        return
 
-            if chunk is None:
-                return
+                    chunk = chunks.pop()
+                    f.seek(0)
+                    json.dump(chunks, f)
+                    f.truncate()
 
             yield from range(*chunk)
     else:

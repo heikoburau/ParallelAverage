@@ -2,8 +2,9 @@ import os
 import numpy as np
 import json
 import dill
+import time
 import multiprocessing as mp
-from subprocess import run
+from subprocess import run, PIPE
 from pathlib import Path
 from shutil import rmtree
 from warnings import warn
@@ -21,18 +22,31 @@ def averages_match(averageA, averageB):
     ])
 
 
-def run_average(average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance, queue=None):
-    package_path = str(Path(os.path.abspath(__file__)).parent)
+def add_average_to_database(average):
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
 
-    function_name = average["function_name"]
-    run([
-        f"{package_path}/submit_job.sh",
-        str(job_path.resolve()),
-        package_path,
-        f"-t 1-{N_tasks} -N {function_name}",
-    ])
+    with SimpleFlock(str(parallel_average_path / "dblock")):
+        with open(database_path, 'r+') as f:
+            if database_path.stat().st_size == 0:
+                averages = []
+            else:
+                averages = json.load(f, cls=NumpyDecoder)
+
+            averages = [a for a in averages if not averages_match(a, average)]
+            averages.append(average)
+            f.seek(0)
+            json.dump(averages, f, indent=2, cls=NumpyEncoder)
+            f.truncate()
+
+
+def collect_task_results(average, failed_tasks_tolerance):
+    parallel_average_path = Path('.') / ".parallel_average"
+    database_path = parallel_average_path / "database.json"
+    job_path = parallel_average_path / average["job_name"]
+    package_path = Path(os.path.abspath(__file__)).parent
+
+    run([f"{package_path}/average_collector.sh", str(job_path.resolve()), str(package_path)])
 
     with open(average["output"]) as f:
         json_output = json.load(f, cls=NumpyDecoder)
@@ -51,28 +65,10 @@ def run_average(average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance
             warn(message_failed)
             average["warning message"] = message_failed
 
-    with SimpleFlock(str(parallel_average_path / "dblock")):
-        with open(database_path, 'r+') as f:
-            if database_path.stat().st_size == 0:
-                averages = []
-            else:
-                averages = json.load(f, cls=NumpyDecoder)
+    average["status"] = "completed"
+    add_average_to_database(average)
 
-            if ignore_cache:
-                for dublicate_average in filter(lambda a: averages_match(a, average), averages):
-                    dublicate_job = parallel_average_path / dublicate_average["job_name"]
-                    if dublicate_job.exists():
-                        rmtree(str(dublicate_job))
-                averages = [a for a in averages if not averages_match(a, average)]
-            averages.append(average)
-            f.seek(0)
-            json.dump(averages, f, indent=2, cls=NumpyEncoder)
-            f.truncate()
-
-    if queue:
-        queue.put(output)
-    else:
-        return output
+    return output
 
 
 def parallel_average(
@@ -119,13 +115,17 @@ def parallel_average(
                             "compute_std": compute_std
                         }
                     ):
+                        if average["status"] == "running":
+                            print("job is still running")
+                            return AsyncResult(average, failed_tasks_tolerance)
+
                         if "warning message" in average:
                             warn(average["warning message"])
                         with open(average["output"]) as f_output:
                             output = json.load(f_output, cls=NumpyDecoder)
                             return output["result"]
 
-            job_name = str(
+            job_name = function.__name__ + str(
                 int(hash(function.__name__) + id(args) + id(kwargs)) % 100000000
             )
             print("running job-array", job_name)
@@ -152,7 +152,7 @@ def parallel_average(
                         "compute_std": compute_std,
                         "save_interpreter_state": save_interpreter_state,
                         "dynamic_load_balancing": dynamic_load_balancing,
-                        "N_static_runs": N_static_runs if "N_static_runs" in locals() else 0
+                        "N_static_runs": N_static_runs if "N_static_runs" in locals() else None
                     },
                     f
                 )
@@ -179,41 +179,51 @@ def parallel_average(
                 "average_arrays": average_arrays,
                 "compute_std": compute_std,
                 "output": str(output_path.resolve()),
-                "job_name": job_name
+                "job_name": job_name,
+                "status": "running"
             }
 
+            package_path = str(Path(os.path.abspath(__file__)).parent)
+            run([
+                f"{package_path}/submit_job.sh",
+                str(job_path.resolve()),
+                package_path,
+                f"-t 1-{N_tasks} -N {job_name}",
+            ])
+
+            add_average_to_database(new_average)
+
+            async_result = AsyncResult(new_average, failed_tasks_tolerance)
+
             if async:
-                queue = mp.Queue()
-                process = mp.Process(
-                    target=run_average,
-                    args=(new_average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance, queue)
-                )
-                process.start()
-                return AsyncResult(process, queue)
+                return async_result
             else:
-                return run_average(new_average, N_tasks, job_path, ignore_cache, failed_tasks_tolerance)
+                return async_result.resolve()
 
         return wrapper
     return decorator
 
 
 class AsyncResult:
-    def __init__(self, process, queue):
-        self.process = process
-        self.queue = queue
+    def __init__(self, average, *params):
+        self.average = average
+        self.params = params
 
     def resolve(self):
         if hasattr(self, "output"):
             return self.output
-        self.output = self.queue.get()
-        self.process.join()
+
+        job_name = self.average["job_name"]
+
+        while True:
+            result = run(["qstat", "-r"], stdout=PIPE)
+            if str(job_name) not in str(result.stdout):
+                break
+            time.sleep(2)
+
+        self.output = collect_task_results(self.average, *self.params)
+
         return self.output
-
-    def __getstate__(self):
-        return False
-
-    def __setstate__(self, state):
-        pass
 
 
 def cleanup():
