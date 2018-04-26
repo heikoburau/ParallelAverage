@@ -40,7 +40,7 @@ def add_average_to_database(average):
             f.truncate()
 
 
-def collect_task_results(average, failed_tasks_tolerance):
+def collect_task_results(average, N_tasks, failed_tasks_tolerance):
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
     job_path = parallel_average_path / average["job_name"]
@@ -117,7 +117,7 @@ def parallel_average(
                     ):
                         if average["status"] == "running":
                             print("job is still running")
-                            return AsyncResult(average, failed_tasks_tolerance)
+                            return AsyncResult(average, N_tasks, failed_tasks_tolerance)
 
                         if "warning message" in average:
                             warn(average["warning message"])
@@ -193,7 +193,7 @@ def parallel_average(
 
             add_average_to_database(new_average)
 
-            async_result = AsyncResult(new_average, failed_tasks_tolerance)
+            async_result = AsyncResult(new_average, N_tasks, failed_tasks_tolerance)
 
             if async:
                 return async_result
