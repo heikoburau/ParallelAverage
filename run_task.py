@@ -10,6 +10,8 @@ from simpleflock import SimpleFlock
 
 task_id = int(sys.argv[1])
 
+to_be_averaged = lambda i: average_arrays == 'all' or i in average_arrays
+
 
 with open("../input/run_task_arguments.json", 'r') as f:
     parameters = json.load(f)
@@ -78,7 +80,7 @@ for run_id in run_ids():
         result = [result]
 
     for i, r in enumerate(result):
-        if isinstance(r, np.ndarray) and (average_arrays == 'all' or i in average_arrays):
+        if isinstance(r, np.ndarray) and to_be_averaged(i):
             task_result[i] += r
             if compute_std == 'all' or (compute_std and i in compute_std):
                 task_square_result[i] += r**2
@@ -87,7 +89,7 @@ for run_id in run_ids():
 
     N_local_runs += 1
 
-task_result = [task_result[i] / N_local_runs for i in sorted(task_result)]
+task_result = [task_result[i] / N_local_runs if to_be_averaged(i) else task_result[1] for i in sorted(task_result)]
 task_square_result = {i: r2 / N_local_runs for i, r2 in task_square_result.items()}
 
 with open(f"output_{task_id}.json", 'a') as f:
