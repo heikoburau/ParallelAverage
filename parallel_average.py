@@ -22,7 +22,7 @@ def averages_match(averageA, averageB):
     ])
 
 
-def add_average_to_database(average):
+def add_average_to_database(average, encoder):
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
 
@@ -31,16 +31,16 @@ def add_average_to_database(average):
             if database_path.stat().st_size == 0:
                 averages = []
             else:
-                averages = json.load(f, cls=NumpyDecoder)
+                averages = json.load(f)
 
             averages = [a for a in averages if not averages_match(a, average)]
             averages.append(average)
             f.seek(0)
-            json.dump(averages, f, indent=2, cls=NumpyEncoder)
+            json.dump(averages, f, indent=2, cls=encoder)
             f.truncate()
 
 
-def collect_task_results(average, N_tasks, failed_tasks_tolerance):
+def collect_task_results(average, N_tasks, failed_tasks_tolerance, encoder, decoder):
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
     job_path = parallel_average_path / average["job_name"]
@@ -49,7 +49,7 @@ def collect_task_results(average, N_tasks, failed_tasks_tolerance):
     run([f"{package_path}/average_collector.sh", str(job_path.resolve()), str(package_path)])
 
     with open(average["output"]) as f:
-        json_output = json.load(f, cls=NumpyDecoder)
+        json_output = json.load(f, cls=decoder)
         output = json_output["result"]
         failed_tasks = json_output["failed_tasks"]
 
@@ -66,7 +66,7 @@ def collect_task_results(average, N_tasks, failed_tasks_tolerance):
             average["warning message"] = message_failed
 
     average["status"] = "completed"
-    add_average_to_database(average)
+    add_average_to_database(average, encoder)
 
     return output
 
@@ -80,7 +80,9 @@ def parallel_average(
     ignore_cache=False,
     async=False,
     failed_tasks_tolerance=0,
-    dynamic_load_balancing=False
+    dynamic_load_balancing=False,
+    encoder=NumpyEncoder,
+    decoder=NumpyDecoder
 ):
     def decorator(function):
         def wrapper(*args, **kwargs):
@@ -92,15 +94,13 @@ def parallel_average(
             if not ignore_cache and database_path.stat().st_size > 0:
                 with SimpleFlock(str(parallel_average_path / "dblock")):
                     with database_path.open() as f:
-                        averages = json.load(f, cls=NumpyDecoder)
+                        averages = json.load(f)
 
                 cleaned_args = json.loads(
-                    json.dumps(args, cls=NumpyEncoder),
-                    cls=NumpyDecoder
+                    json.dumps(args, cls=encoder),
                 )
                 cleaned_kwargs = json.loads(
-                    json.dumps(kwargs, cls=NumpyEncoder),
-                    cls=NumpyDecoder
+                    json.dumps(kwargs, cls=encoder),
                 )
 
                 for average in averages:
@@ -117,12 +117,12 @@ def parallel_average(
                     ):
                         if average["status"] == "running":
                             print("job is still running")
-                            return AsyncResult(average, N_tasks, failed_tasks_tolerance)
+                            return AsyncResult(average, N_tasks, failed_tasks_tolerance, encoder=encoder, decoder=decoder)
 
                         if "warning message" in average:
                             warn(average["warning message"])
                         with open(average["output"]) as f_output:
-                            output = json.load(f_output, cls=NumpyDecoder)
+                            output = json.load(f_output, cls=decoder)
                             return output["result"]
 
             job_name = function.__name__ + str(
@@ -157,18 +157,29 @@ def parallel_average(
                     f
                 )
 
-            with (input_path / "function.d").open('wb') as f:
-                dill.dump(function, f)
-            with (input_path / "args.d").open('wb') as f:
-                dill.dump(args, f)
-            with (input_path / "kwargs.d").open('wb') as f:
-                dill.dump(kwargs, f)
+            with (input_path / "run_task.d").open('wb') as f:
+                dill.dump(
+                    {
+                        "function": function,
+                        "args": args,
+                        "kwargs": kwargs,
+                        "encoder": encoder
+                    },
+                    f
+                )
 
             if save_interpreter_state:
                 dill.dump_session(str(input_path / "session.sess"))
 
-            with (job_path / "collector_arguments.json").open('w') as f:
-                json.dump(average_arrays, f, cls=NumpyEncoder)
+            with (job_path / "collector_arguments.d").open('wb') as f:
+                dill.dump(
+                    {
+                        "average_arrays": average_arrays,
+                        "encoder": encoder,
+                        "decoder": decoder
+                    },
+                    f
+                )
 
             output_path = job_path / "output.json"
             new_average = {
@@ -191,9 +202,9 @@ def parallel_average(
                 f"-t 1-{N_tasks} -N {job_name}",
             ])
 
-            add_average_to_database(new_average)
+            add_average_to_database(new_average, encoder)
 
-            async_result = AsyncResult(new_average, N_tasks, failed_tasks_tolerance)
+            async_result = AsyncResult(new_average, N_tasks, failed_tasks_tolerance, encoder=encoder, decoder=decoder)
 
             if async:
                 return async_result
@@ -205,9 +216,11 @@ def parallel_average(
 
 
 class AsyncResult:
-    def __init__(self, average, *params):
+    def __init__(self, average, *params, encoder, decoder):
         self.average = average
         self.params = params
+        self.encoder = encoder
+        self.decoder = decoder
 
     def resolve(self):
         if hasattr(self, "output"):
@@ -221,9 +234,15 @@ class AsyncResult:
                 break
             time.sleep(2)
 
-        self.output = collect_task_results(self.average, *self.params)
+        self.output = collect_task_results(self.average, *self.params, encoder=self.encoder, decoder=self.decoder)
 
         return self.output
+
+
+def wait_for_result(async_job):
+    if hasattr(async_job, "resolve"):
+        return async_job.resolve()
+    return async_job
 
 
 def cleanup():

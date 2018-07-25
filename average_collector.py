@@ -2,13 +2,17 @@ from pathlib import Path
 from collections import defaultdict
 import numpy as np
 import json
-from json_numpy import NumpyEncoder, NumpyDecoder
+import dill
 
 
 task_dirs = [d for d in Path(".").iterdir() if d.is_dir() and str(d).isdigit()]
 
-with open("collector_arguments.json", 'r') as f:
-    average_arrays = json.load(f)
+with open("collector_arguments.d", 'rb') as f:
+    arguments = dill.load(f)
+
+average_arrays = arguments["average_arrays"]
+encoder = arguments["encoder"]
+decoder = arguments["decoder"]
 
 result = defaultdict(lambda: 0)
 square_result = defaultdict(lambda: 0)
@@ -23,7 +27,7 @@ for task_dir in task_dirs:
     task_output_file = task_dir / f"output_{task_id}.json"
 
     try:
-        output = json.load(open(task_output_file, 'r'), cls=NumpyDecoder)
+        output = json.load(open(task_output_file, 'r'), cls=decoder)
     except FileNotFoundError:
         failed_tasks.append({
             "task_id": task_id,
@@ -68,5 +72,5 @@ with open("output.json", 'w') as f:
             "result": result
         },
         f,
-        cls=NumpyEncoder
+        cls=encoder
     )

@@ -3,7 +3,6 @@ import numpy as np
 import json
 import dill
 from collections import defaultdict
-from json_numpy import NumpyEncoder
 from pathlib import Path
 from simpleflock import SimpleFlock
 
@@ -23,14 +22,13 @@ with open("../input/run_task_arguments.json", 'r') as f:
     dynamic_load_balancing = parameters["dynamic_load_balancing"]
     N_static_runs = parameters["N_static_runs"]
 
-with open("../input/function.d", 'rb') as f:
-    function = dill.load(f)
+with open("../input/run_task.d", 'rb') as f:
+    run_task = dill.load(f)
 
-with open("../input/args.d", 'rb') as f:
-    args = dill.load(f)
-
-with open("../input/kwargs.d", 'rb') as f:
-    kwargs = dill.load(f)
+function = run_task["function"]
+args = run_task["args"]
+kwargs = run_task["kwargs"]
+encoder = run_task["encoder"]
 
 if save_interpreter_state:
     dill.load_session("../input/session.sess")
@@ -89,7 +87,7 @@ for run_id in run_ids():
 
     N_local_runs += 1
 
-task_result = [task_result[i] / N_local_runs if to_be_averaged(i) else task_result[1] for i in sorted(task_result)]
+task_result = [task_result[i] / N_local_runs if to_be_averaged(i) else task_result[i] for i in sorted(task_result)]
 task_square_result = {i: r2 / N_local_runs for i, r2 in task_square_result.items()}
 
 with open(f"output_{task_id}.json", 'a') as f:
@@ -101,5 +99,5 @@ with open(f"output_{task_id}.json", 'a') as f:
         },
         f,
         indent=2,
-        cls=NumpyEncoder
+        cls=encoder
     )
