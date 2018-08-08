@@ -40,7 +40,7 @@ def add_average_to_database(average, encoder):
             f.truncate()
 
 
-def collect_task_results(average, N_tasks, failed_tasks_tolerance, encoder, decoder):
+def collect_task_results(average, N_runs, failed_runs_tolerance, encoder, decoder):
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
     job_path = parallel_average_path / average["job_name"]
@@ -51,15 +51,17 @@ def collect_task_results(average, N_tasks, failed_tasks_tolerance, encoder, deco
     with open(average["output"]) as f:
         json_output = json.load(f, cls=decoder)
         output = json_output["result"]
-        failed_tasks = json_output["failed_tasks"]
+        failed_runs = json_output["failed_runs"]
 
-    if failed_tasks:
-        failed_task = failed_tasks[0]
+    if failed_runs:
+        error_message = json_output["error_message"]
+        error_run_id = json_output["error_run_id"]
+
         message_failed = (
-            f"{len(failed_tasks)} / {N_tasks} tasks failed!\nError message of task {failed_task['task_id']} with run_id = {failed_task['run_id']}:\n\n" +
-            failed_task["error message"]
+            f"{len(failed_runs)} / {N_runs} runs failed!\nError message of run {error_run_id}:\n\n" +
+            error_message
         )
-        if len(failed_tasks) > failed_tasks_tolerance:
+        if len(failed_runs) > failed_runs_tolerance:
             raise RuntimeError(message_failed)
         else:
             warn(message_failed)
@@ -79,7 +81,7 @@ def parallel_average(
     save_interpreter_state=False,
     ignore_cache=False,
     async=False,
-    failed_tasks_tolerance=0,
+    failed_runs_tolerance=0,
     dynamic_load_balancing=False,
     encoder=NumpyEncoder,
     decoder=NumpyDecoder
@@ -117,7 +119,11 @@ def parallel_average(
                     ):
                         if average["status"] == "running":
                             print("job is still running")
-                            return AsyncResult(average, N_tasks, failed_tasks_tolerance, encoder=encoder, decoder=decoder)
+                            async_result = AsyncResult(average, N_tasks, failed_runs_tolerance, encoder=encoder, decoder=decoder)
+                            if async:
+                                return async_result
+                            else:
+                                return async_result.resolve()
 
                         if "warning message" in average:
                             warn(average["warning message"])
@@ -204,7 +210,7 @@ def parallel_average(
 
             add_average_to_database(new_average, encoder)
 
-            async_result = AsyncResult(new_average, N_tasks, failed_tasks_tolerance, encoder=encoder, decoder=decoder)
+            async_result = AsyncResult(new_average, N_runs, failed_runs_tolerance, encoder=encoder, decoder=decoder)
 
             if async:
                 return async_result
@@ -252,7 +258,7 @@ def cleanup():
         return
 
     with open(database_path) as f:
-        database_json = json.load(f, cls=NumpyDecoder)
+        database_json = json.load(f)
 
     database_jobs = {average["job_name"] for average in database_json}
     existing_jobs = {job.name for job in parallel_average_path.iterdir() if job.is_dir()}

@@ -57,22 +57,17 @@ def run_ids():
         yield from range(task_id - 1, N_runs, N_tasks)
 
 N_local_runs = 0
+failed_runs = []
+error_message = ""
 
 for run_id in run_ids():
     kwargs["run_id"] = run_id
     try:
         result = function(*args, **kwargs)
     except Exception as e:
-        with open(f"output_{task_id}.json", 'a') as f:
-            json.dump(
-                {
-                    "failed": True,
-                    "run_id": run_id,
-                    "error message": type(e).__name__ + ": " + str(e)
-                },
-                f
-            )
-        raise e
+        failed_runs.append(run_id)
+        error_message = type(e).__name__ + ": " + str(e)
+        continue
 
     if not isinstance(result, (list, tuple)):
         result = [result]
@@ -87,15 +82,24 @@ for run_id in run_ids():
 
     N_local_runs += 1
 
-task_result = [task_result[i] / N_local_runs if to_be_averaged(i) else task_result[i] for i in sorted(task_result)]
-task_square_result = {i: r2 / N_local_runs for i, r2 in task_square_result.items()}
+if N_local_runs > 0:
+    task_result = [task_result[i] / N_local_runs if to_be_averaged(i) else task_result[i] for i in sorted(task_result)]
+    task_square_result = {i: r2 / N_local_runs for i, r2 in task_square_result.items()}
+else:
+    task_result = None
+    task_square_result = None
 
 with open(f"output_{task_id}.json", 'a') as f:
     json.dump(
         {
             "task_result": task_result,
             "task_square_result": task_square_result,
-            "N_local_runs": N_local_runs
+            "N_local_runs": N_local_runs,
+            "failed_runs": failed_runs,
+            "error_message": {
+                "run_id": failed_runs[-1] if failed_runs else -1,
+                "message": error_message
+            }
         },
         f,
         indent=2,
