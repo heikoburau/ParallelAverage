@@ -3,6 +3,8 @@ import time
 import os
 import fcntl
 import errno
+import random
+
 
 class SimpleFlock:
    """Provides the simplest possible interface to flock-based file locking. Intended for use with the `with` syntax. It will create/truncate/delete the lock file as necessary."""
@@ -29,7 +31,7 @@ class SimpleFlock:
 
          # TODO It would be nice to avoid an arbitrary sleep here, but spinning
          # without a delay is also undesirable.
-         time.sleep(0.5)
+         time.sleep(0.5 + 0.5 * random.random())
 
    def __exit__(self, *args):
       fcntl.flock(self._fd, fcntl.LOCK_UN)

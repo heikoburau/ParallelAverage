@@ -2,6 +2,8 @@ import sys
 import numpy as np
 import json
 import dill
+import time
+import random
 from collections import defaultdict
 from pathlib import Path
 from simpleflock import SimpleFlock
@@ -41,18 +43,26 @@ def run_ids():
     if dynamic_load_balancing:
         yield from range(task_id - 1, N_static_runs, N_tasks)
         while True:
-            with SimpleFlock("../input/chunks_lock"):
-                with open("../input/chunks.json", 'r+') as f:
-                    chunks = json.load(f)
-                    if not chunks:
-                        return
+	        chunk = None
+	        while chunk is None:
+	            try:
+                    with SimpleFlock("../input/chunks_lock"):
+                        with open("../input/chunks.json", 'r+') as f:
+                            chunks = json.load(f)
+                            if not chunks:
+                                return
 
-                    chunk = chunks.pop()
-                    f.seek(0)
-                    json.dump(chunks, f)
-                    f.truncate()
+                            chunk = chunks.pop()
+                            f.seek(0)
+                            json.dump(chunks, f)
+                            f.truncate()
+                except Exception:
+                    time.sleep(0.5 + 0.5 * random.random())
+                    chunk = None
 
-            yield from range(*chunk)
+            if chunk:
+                yield from range(*chunk)
+            return
     else:
         yield from range(task_id - 1, N_runs, N_tasks)
 
@@ -61,6 +71,12 @@ failed_runs = []
 error_message = ""
 
 for run_id in run_ids():
+    try:
+        with open("../progress.txt", "a") as f:
+            f.write(str(run_id) + "\n")
+    except Exception:
+        print("Error while writing to progress.txt")
+
     kwargs["run_id"] = run_id
     try:
         result = function(*args, **kwargs)
