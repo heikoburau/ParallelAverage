@@ -143,7 +143,7 @@ def parallel_average(
             if dynamic_load_balancing:
                 N_static_runs = N_runs // 4
                 N_dynamic_runs = N_runs - N_static_runs
-                chunk_size = N_dynamic_runs // 3 // N_tasks
+                chunk_size = max(1, N_dynamic_runs // 3 // N_tasks)
                 dynamic_slices = list(range(N_static_runs, N_runs, chunk_size)) + [N_runs]
                 chunks = list(zip(dynamic_slices[:-1], dynamic_slices[1:]))
                 with (input_path / "chunks.json").open('w') as f:

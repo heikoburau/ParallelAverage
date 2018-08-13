@@ -43,9 +43,9 @@ def run_ids():
     if dynamic_load_balancing:
         yield from range(task_id - 1, N_static_runs, N_tasks)
         while True:
-	        chunk = None
-	        while chunk is None:
-	            try:
+            chunk = None
+            while chunk is None:
+                try:
                     with SimpleFlock("../input/chunks_lock"):
                         with open("../input/chunks.json", 'r+') as f:
                             chunks = json.load(f)
@@ -60,9 +60,7 @@ def run_ids():
                     time.sleep(0.5 + 0.5 * random.random())
                     chunk = None
 
-            if chunk:
-                yield from range(*chunk)
-            return
+            yield from range(*chunk)
     else:
         yield from range(task_id - 1, N_runs, N_tasks)
 
