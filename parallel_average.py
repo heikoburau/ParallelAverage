@@ -8,6 +8,7 @@ from subprocess import run, PIPE
 from pathlib import Path
 from shutil import rmtree
 from warnings import warn
+from copy import deepcopy
 from .simpleflock import SimpleFlock
 from .json_numpy import NumpyEncoder, NumpyDecoder
 try:
@@ -20,6 +21,21 @@ def averages_match(averageA, averageB):
     return all(averageA[key] == averageB[key] for key in [
         "function_name", "args", "kwargs", "N_runs", "average_arrays", "compute_std"
     ])
+
+
+def cleaned_average(average, encoder):
+    cleaned_args = json.loads(
+        json.dumps(average["args"], cls=encoder),
+    )
+    cleaned_kwargs = json.loads(
+        json.dumps(average["kwargs"], cls=encoder),
+    )
+
+    result = deepcopy(average)
+    result["args"] = cleaned_args
+    result["kwargs"] = cleaned_kwargs
+
+    return result
 
 
 def add_average_to_database(average, encoder):
@@ -76,6 +92,7 @@ def collect_task_results(average, N_runs, failed_runs_tolerance, encoder, decode
 def parallel_average(
     N_runs,
     N_tasks,
+    N_threads=1,
     average_arrays='all',
     compute_std=None,
     save_interpreter_state=True,
@@ -98,28 +115,23 @@ def parallel_average(
                     with database_path.open() as f:
                         averages = json.load(f)
 
-                cleaned_args = json.loads(
-                    json.dumps(args, cls=encoder),
-                )
-                cleaned_kwargs = json.loads(
-                    json.dumps(kwargs, cls=encoder),
+                current_average = cleaned_average(
+                    {
+                        "function_name": function.__name__,
+                        "args": args,
+                        "kwargs": kwargs,
+                        "N_runs": N_runs,
+                        "average_arrays": average_arrays,
+                        "compute_std": compute_std
+                    },
+                    encoder
                 )
 
                 for average in averages:
-                    if averages_match(
-                        average,
-                        {
-                            "function_name": function.__name__,
-                            "args": cleaned_args,
-                            "kwargs": cleaned_kwargs,
-                            "N_runs": N_runs,
-                            "average_arrays": average_arrays,
-                            "compute_std": compute_std
-                        }
-                    ):
+                    if averages_match(average, current_average):
                         if average["status"] == "running":
                             print("job is still running")
-                            async_result = AsyncResult(average, N_tasks, failed_runs_tolerance, encoder=encoder, decoder=decoder)
+                            async_result = AsyncResult(average, N_runs, failed_runs_tolerance, encoder=encoder, decoder=decoder)
                             if async:
                                 return async_result
                             else:
@@ -154,6 +166,7 @@ def parallel_average(
                     {
                         "N_runs": N_runs,
                         "N_tasks": N_tasks,
+                        "N_threads": N_threads,
                         "average_arrays": average_arrays,
                         "compute_std": compute_std,
                         "save_interpreter_state": save_interpreter_state,
@@ -188,17 +201,20 @@ def parallel_average(
                 )
 
             output_path = job_path / "output.json"
-            new_average = {
-                "function_name": function.__name__,
-                "args": list(args),
-                "kwargs": kwargs,
-                "N_runs": N_runs,
-                "average_arrays": average_arrays,
-                "compute_std": compute_std,
-                "output": str(output_path.resolve()),
-                "job_name": job_name,
-                "status": "running"
-            }
+            new_average = cleaned_average(
+                {
+                    "function_name": function.__name__,
+                    "args": args,
+                    "kwargs": kwargs,
+                    "N_runs": N_runs,
+                    "average_arrays": average_arrays,
+                    "compute_std": compute_std,
+                    "output": str(output_path.resolve()),
+                    "job_name": job_name,
+                    "status": "running"
+                },
+                encoder
+            )
 
             package_path = str(Path(os.path.abspath(__file__)).parent)
             run([
