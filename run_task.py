@@ -2,8 +2,9 @@ import sys
 import numpy as np
 import json
 import dill
-import time
+import time as time_mod
 import random
+import threading
 from collections import defaultdict
 from pathlib import Path
 from simpleflock import SimpleFlock
@@ -18,6 +19,7 @@ with open("../input/run_task_arguments.json", 'r') as f:
     parameters = json.load(f)
     N_runs = parameters["N_runs"]
     N_tasks = parameters["N_tasks"]
+    N_threads = parameters["N_threads"]
     average_arrays = parameters["average_arrays"]
     compute_std = parameters["compute_std"]
     save_interpreter_state = parameters["save_interpreter_state"]
@@ -34,10 +36,6 @@ encoder = run_task["encoder"]
 
 if save_interpreter_state:
     dill.load_session("../input/session.sess")
-
-task_result = defaultdict(lambda: 0)
-task_square_result = defaultdict(lambda: 0)
-
 
 def run_ids():
     if dynamic_load_balancing:
@@ -57,18 +55,17 @@ def run_ids():
                             json.dump(chunks, f)
                             f.truncate()
                 except Exception:
-                    time.sleep(0.5 + 0.5 * random.random())
+                    time_mod.sleep(0.5 + 0.5 * random.random())
                     chunk = None
 
             yield from range(*chunk)
     else:
         yield from range(task_id - 1, N_runs, N_tasks)
 
-N_local_runs = 0
-failed_runs = []
-error_message = ""
 
-for run_id in run_ids():
+def execute_run(run_id):
+    global task_result, task_square_result, N_local_runs, failed_runs, error_message
+
     try:
         with open("../progress.txt", "a") as f:
             f.write(str(run_id) + "\n")
@@ -81,7 +78,7 @@ for run_id in run_ids():
     except Exception as e:
         failed_runs.append(run_id)
         error_message = type(e).__name__ + ": " + str(e)
-        continue
+        return
 
     if not isinstance(result, (list, tuple)):
         result = [result]
@@ -95,6 +92,31 @@ for run_id in run_ids():
             task_result[i] = r
 
     N_local_runs += 1
+
+
+task_result = defaultdict(lambda: 0)
+task_square_result = defaultdict(lambda: 0)
+N_local_runs = 0
+failed_runs = []
+error_message = ""
+if N_threads > 1:
+    active_threads = []
+
+for run_id in run_ids():
+    if N_threads > 1:
+        while len(active_threads) == N_threads:
+            time_mod.sleep(2)
+            active_threads = [thread for thread in active_threads if thread.is_alive()]
+
+        thread = threading.Thread(target=execute_run, args=(run_id,))
+        thread.start()
+        active_threads.append(thread)
+    else:
+        execute_run(run_id)
+
+if N_threads > 1:
+    for thread in active_threads:
+        thread.join()
 
 if N_local_runs > 0:
     task_result = [task_result[i] / N_local_runs if to_be_averaged(i) else task_result[i] for i in sorted(task_result)]

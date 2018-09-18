@@ -28,7 +28,10 @@ for task_dir in task_dirs:
     task_id = int(str(task_dir))
     task_output_file = task_dir / f"output_{task_id}.json"
 
-    output = json.load(open(task_output_file, 'r'), cls=decoder)
+    try:
+        output = json.load(open(task_output_file, 'r'), cls=decoder)
+    except Exception:
+        continue
     if output["failed_runs"]:
         failed_runs += output["failed_runs"]
         error_message = output["error_message"]["message"]
@@ -55,7 +58,7 @@ if N_total_runs > 0:
 
     square_result = {i: r2 / N_total_runs for i, r2 in square_result.items()}
     for i, r2 in square_result.items():
-        result[i] = [result[i], np.sqrt(r2 - result[i]**2)]
+        result[i] = [result[i], np.sqrt((r2 - result[i]**2) / (N_total_runs - 1))]
 
     if len(result) == 1:
         result = result[0]

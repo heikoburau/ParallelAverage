@@ -267,14 +267,19 @@ def wait_for_result(async_job):
     return async_job
 
 
-def cleanup():
+def cleanup(remove_running_jobs=False):
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
     if not database_path.exists() or database_path.stat().st_size == 0:
         return
 
-    with open(database_path) as f:
+    with open(database_path, "r+") as f:
         database_json = json.load(f)
+        if remove_running_jobs:
+            database_json = [average for average in database_json if "status" not in average or average["status"] == "completed"]
+            f.seek(0)
+            json.dump(database_json, f, indent=2)
+            f.truncate()
 
     database_jobs = {average["job_name"] for average in database_json}
     existing_jobs = {job.name for job in parallel_average_path.iterdir() if job.is_dir()}
