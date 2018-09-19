@@ -101,7 +101,9 @@ def parallel_average(
     failed_runs_tolerance=0,
     dynamic_load_balancing=False,
     encoder=NumpyEncoder,
-    decoder=NumpyDecoder
+    decoder=NumpyDecoder,
+    slurm=False,
+    **queuing_system_options
 ):
     def decorator(function):
         def wrapper(*args, **kwargs):
@@ -217,12 +219,48 @@ def parallel_average(
             )
 
             package_path = str(Path(os.path.abspath(__file__)).parent)
-            run([
-                f"{package_path}/submit_job.sh",
-                str(job_path.resolve()),
-                package_path,
-                f"-t 1-{N_tasks} -N {job_name}",
-            ])
+            if slurm:
+                options = {
+                    "array": f"1-{N_tasks}",
+                    "job-name": job_name,
+                    "chdir": str(job_path.resolve()),
+                    "time": "24:00:00"
+                }
+                options.update(queuing_system_options)
+
+                options_str = ""
+                for name, value in options.items():
+                    if len(name) == 1:
+                        options_str += f"#SBATCH -{name} {value}\n"
+                    else:
+                        options_str += f"#SBATCH --{name}={value}\n"
+
+                job_script_slurm = (
+                    "#!/bin/bash -i\n\n"
+                    f"{options_str.strip()}\n\n"
+                    "WORK_DIR=./$SLURM_ARRAY_TASK_ID\n"
+                    "mkdir -p $WORK_DIR\n"
+                    "module purge\n"
+                    "module load intelpython3\n"
+                    "cd $WORK_DIR\n"
+                    "python $1 $SLURM_ARRAY_TASK_ID\n"
+                )
+
+                with (job_path / "job_script_slurm.sh").open('w') as f:
+                    f.write(job_script_slurm)
+
+                run([
+                    "sbatch",
+                    f"{job_path}/job_script_slurm.sh",
+                    f"{package_path}/run_task.py"
+                ])
+            else:
+                run([
+                    f"{package_path}/submit_job.sh",
+                    str(job_path.resolve()),
+                    package_path,
+                    f"-t 1-{N_tasks} -N {job_name}",
+                ])
 
             add_average_to_database(new_average, encoder)
 
