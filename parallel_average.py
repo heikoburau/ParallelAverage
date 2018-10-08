@@ -359,3 +359,29 @@ class Database:
 
 
 database = Database()
+
+
+def plot_average(time, x, label=None, color=0, points=False, linestyle="-"):
+    import matplotlib.pyplot as plt
+
+    color = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink"][color]
+
+    if points:
+        plt.errorbar(
+            time,
+            x[0],
+            yerr=x[1],
+            marker="o",
+            linestyle="None",
+            color=color,
+            label=label
+        )
+    else:
+        plt.plot(time, x[0], label=label, color=color, linestyle=linestyle)
+        plt.fill_between(
+            time,
+            x[0] - x[1],
+            x[0] + x[1],
+            facecolor=color,
+            alpha=0.25
+        )
