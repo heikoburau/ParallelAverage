@@ -8,6 +8,7 @@ import threading
 from collections import defaultdict
 from pathlib import Path
 from simpleflock import SimpleFlock
+from ParallelAverage import WeightedSample
 
 
 task_id = int(sys.argv[1])
@@ -37,6 +38,7 @@ encoder = run_task["encoder"]
 if save_interpreter_state:
     dill.load_session("../input/session.sess")
 
+
 def run_ids():
     if dynamic_load_balancing:
         yield from range(task_id - 1, N_static_runs, N_tasks)
@@ -64,7 +66,7 @@ def run_ids():
 
 
 def execute_run(run_id):
-    global task_result, task_square_result, N_local_runs, failed_runs, error_message
+    global task_result, task_square_result, N_local_runs, local_weights, failed_runs, error_message
 
     try:
         with open("../progress.txt", "a") as f:
@@ -84,10 +86,18 @@ def execute_run(run_id):
         result = [result]
 
     for i, r in enumerate(result):
-        if isinstance(r, np.ndarray) and to_be_averaged(i):
-            task_result[i] += r
+        if isinstance(r, WeightedSample):
+            weight = r.weight
+            r = r.sample
+        else:
+            weight = 1
+
+        local_weights[i] += weight
+
+        if to_be_averaged(i):
+            task_result[i] += weight * r if weight > 0 else 0
             if compute_std == 'all' or (compute_std and i in compute_std):
-                task_square_result[i] += r**2
+                task_square_result[i] += weight * r**2 if weight > 0 else 0
         else:
             task_result[i] = r
 
@@ -97,6 +107,7 @@ def execute_run(run_id):
 task_result = defaultdict(lambda: 0)
 task_square_result = defaultdict(lambda: 0)
 N_local_runs = 0
+local_weights = defaultdict(lambda: 0)
 failed_runs = []
 error_message = ""
 if N_threads > 1:
@@ -119,8 +130,14 @@ if N_threads > 1:
         thread.join()
 
 if N_local_runs > 0:
-    task_result = [task_result[i] / N_local_runs if to_be_averaged(i) else task_result[i] for i in sorted(task_result)]
-    task_square_result = {i: r2 / N_local_runs for i, r2 in task_square_result.items()}
+    task_result = [
+        task_result[i] / local_weights[i] if to_be_averaged(i) and local_weights[i] > 0 else task_result[i]
+        for i in sorted(task_result)
+    ]
+    task_square_result = {
+        i: (r2 / local_weights[i] if local_weights[i] > 0 else 0)
+        for i, r2 in task_square_result.items()
+    }
 else:
     task_result = None
     task_square_result = None
@@ -131,6 +148,7 @@ with open(f"output_{task_id}.json", 'a') as f:
             "task_result": task_result,
             "task_square_result": task_square_result,
             "N_local_runs": N_local_runs,
+            "local_weights": dict(local_weights),
             "failed_runs": failed_runs,
             "error_message": {
                 "run_id": failed_runs[-1] if failed_runs else -1,

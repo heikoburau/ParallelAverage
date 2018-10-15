@@ -83,8 +83,8 @@ def collect_task_results(average, N_runs, failed_runs_tolerance, encoder, decode
             warn(message_failed)
             average["warning message"] = message_failed
 
-    average["status"] = "completed"
-    add_average_to_database(average, encoder)
+    # average["status"] = "completed"
+    # add_average_to_database(average, encoder)
 
     return output
 
@@ -94,7 +94,7 @@ def parallel_average(
     N_tasks,
     N_threads=1,
     average_arrays='all',
-    compute_std=None,
+    compute_std='all',
     save_interpreter_state=True,
     ignore_cache=False,
     async=True,
@@ -288,11 +288,11 @@ class AsyncResult:
 
         job_name = self.average["job_name"]
 
-        while True:
-            result = run(["qstat", "-r"], stdout=PIPE)
-            if str(job_name) not in str(result.stdout):
-                break
-            time.sleep(2)
+        # while True:
+        #     result = run(["qstat", "-r"], stdout=PIPE)
+        #     if str(job_name) not in str(result.stdout):
+        #         break
+        #     time.sleep(2)
 
         self.output = collect_task_results(self.average, *self.params, encoder=self.encoder, decoder=self.decoder)
 
@@ -385,3 +385,9 @@ def plot_average(time, x, label=None, color=0, points=False, linestyle="-"):
             facecolor=color,
             alpha=0.25
         )
+
+
+class WeightedSample:
+    def __init__(self, sample, weight):
+        self.sample = sample
+        self.weight = weight

@@ -23,6 +23,7 @@ failed_runs = []
 error_message = ""
 error_run_id = -1
 N_total_runs = 0
+total_weights = defaultdict(lambda: 0)
 
 for task_dir in task_dirs:
     task_id = int(str(task_dir))
@@ -40,23 +41,35 @@ for task_dir in task_dirs:
     if output["N_local_runs"] == 0:
         continue
 
+    local_weights = defaultdict(lambda: 0)
+    for i, local_weight in output["local_weights"].items():
+        local_weights[int(i)] = local_weight
+
     for i, r in enumerate(output["task_result"]):
         if to_be_averaged(i):
-            result[i] += r * output["N_local_runs"]
+            result[i] += r * local_weights[i] if local_weights[i] > 0 else 0
         else:
             result[i] = r
 
+        total_weights[i] += local_weights[i]
+
     for i, r2 in output["task_square_result"].items():
         i = int(i)
-        square_result[i] += r2 * output["N_local_runs"]
+        square_result[i] += r2 * local_weights[i] if local_weights[i] > 0 else 0
 
     N_total_runs += output["N_local_runs"]
 
 if N_total_runs > 0:
-    result = {i: r / N_total_runs if to_be_averaged(i) else r for i, r in result.items()}
+    result = {
+        i: (r / total_weights[i] if to_be_averaged(i) and total_weights[i] > 0 else r)
+        for i, r in result.items()
+    }
     result = [result[i] for i in sorted(result)]
 
-    square_result = {i: r2 / N_total_runs for i, r2 in square_result.items()}
+    square_result = {
+        i: (r2 / total_weights[i] if total_weights[i] > 0 else 0)
+        for i, r2 in square_result.items()
+    }
     for i, r2 in square_result.items():
         result[i] = [result[i], np.sqrt((r2 - result[i]**2) / (N_total_runs - 1))]
 
