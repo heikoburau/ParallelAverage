@@ -1,104 +1,171 @@
-import os
-import numpy as np
-import json
-import dill
-import time
-import multiprocessing as mp
-from subprocess import run, PIPE
-from pathlib import Path
-from shutil import rmtree
-from warnings import warn
-from copy import deepcopy
+from .database import add_average_to_database
+from .AsyncResult import AsyncResult
+from .average_utils import cleaned_average, averages_match
 from .simpleflock import SimpleFlock
 from .json_numpy import NumpyEncoder, NumpyDecoder
-try:
-    import objectpath
-except ImportError:
+
+import os
+import json
+import dill
+from subprocess import run
+from pathlib import Path
+from shutil import rmtree
+
+
+class CachedAverageDoesNotExist(RuntimeError):
     pass
 
 
-def averages_match(averageA, averageB):
-    return all(averageA[key] == averageB[key] for key in [
-        "function_name", "args", "kwargs", "N_runs", "average_arrays", "compute_std"
+def load_cached_average(function, args, kwargs, N_runs, average_results, encoder, decoder):
+    parallel_average_path = Path('.') / ".parallel_average"
+    database_path = parallel_average_path / "database.json"
+
+    current_average = cleaned_average(
+        {
+            "function_name": function.__name__,
+            "args": args,
+            "kwargs": kwargs,
+            "N_runs": N_runs,
+            "average_results": average_results
+        },
+        encoder
+    )
+
+    with SimpleFlock(str(parallel_average_path / "dblock")):
+        with database_path.open() as f:
+            averages = json.load(f)
+
+    for average in averages:
+        if averages_match(average, current_average):
+            return AsyncResult(average, N_runs, encoder=encoder, decoder=decoder).collect_task_results()
+
+    raise CachedAverageDoesNotExist()
+
+
+def setup_dynamic_load_balancing(N_runs, N_tasks, input_path):
+    N_static_runs = N_runs // 4
+    N_dynamic_runs = N_runs - N_static_runs
+    chunk_size = max(1, N_dynamic_runs // 3 // N_tasks)
+    dynamic_slices = list(range(N_static_runs, N_runs, chunk_size)) + [N_runs]
+    chunks = list(zip(dynamic_slices[:-1], dynamic_slices[1:]))
+    with (input_path / "chunks.json").open('w') as f:
+        json.dump(chunks, f)
+
+    return N_static_runs
+
+
+def setup_task_input_data(
+    input_path,
+    N_runs,
+    N_tasks,
+    N_threads,
+    average_results,
+    save_interpreter_state,
+    dynamic_load_balancing,
+    N_static_runs,
+    function,
+    args,
+    kwargs,
+    encoder
+):
+    with (input_path / "run_task_arguments.json").open('w') as f:
+        json.dump(
+            {
+                "N_runs": N_runs,
+                "N_tasks": N_tasks,
+                "N_threads": N_threads,
+                "average_results": average_results,
+                "save_interpreter_state": save_interpreter_state,
+                "dynamic_load_balancing": dynamic_load_balancing,
+                "N_static_runs": N_static_runs
+            },
+            f
+        )
+
+    with (input_path / "run_task.d").open('wb') as f:
+        dill.dump(
+            {
+                "function": function,
+                "args": args,
+                "kwargs": kwargs,
+                "encoder": encoder
+            },
+            f
+        )
+
+    if save_interpreter_state:
+        dill.dump_session(str(input_path / "session.sess"))
+
+
+def setup_collector_input_data(input_path, average_results, encoder, decoder):
+    with (input_path / "collector_arguments.d").open('wb') as f:
+        dill.dump(
+            {
+                "average_results": average_results,
+                "encoder": encoder,
+                "decoder": decoder
+            },
+            f
+        )
+
+
+def setup_and_submit_to_slurm(N_tasks, job_name, job_path, queuing_system_options):
+    package_path = str(Path(os.path.abspath(__file__)).parent)
+
+    options = {
+        "array": f"1-{N_tasks}",
+        "job-name": job_name,
+        "chdir": str(job_path.resolve()),
+        "time": "24:00:00"
+    }
+    options.update(queuing_system_options)
+
+    options_str = ""
+    for name, value in options.items():
+        if len(name) == 1:
+            options_str += f"#SBATCH -{name} {value}\n"
+        else:
+            options_str += f"#SBATCH --{name}={value}\n"
+
+    job_script_slurm = (
+        "#!/bin/bash -i\n\n"
+        f"{options_str.strip()}\n\n"
+        "WORK_DIR=./$SLURM_ARRAY_TASK_ID\n"
+        "mkdir -p $WORK_DIR\n"
+        "module purge\n"
+        "module load intelpython3\n"
+        "cd $WORK_DIR\n"
+        "python $1 $SLURM_ARRAY_TASK_ID\n"
+    )
+
+    with (job_path / "job_script_slurm.sh").open('w') as f:
+        f.write(job_script_slurm)
+
+    run([
+        "sbatch",
+        f"{job_path}/job_script_slurm.sh",
+        f"{package_path}/run_task.py"
     ])
 
 
-def cleaned_average(average, encoder):
-    cleaned_args = json.loads(
-        json.dumps(average["args"], cls=encoder),
-    )
-    cleaned_kwargs = json.loads(
-        json.dumps(average["kwargs"], cls=encoder),
-    )
+def submit_to_sge(N_tasks, job_name, job_path):
+    package_path = str(Path(os.path.abspath(__file__)).parent)
 
-    result = deepcopy(average)
-    result["args"] = cleaned_args
-    result["kwargs"] = cleaned_kwargs
-
-    return result
-
-
-def add_average_to_database(average, encoder):
-    parallel_average_path = Path('.') / ".parallel_average"
-    database_path = parallel_average_path / "database.json"
-
-    with SimpleFlock(str(parallel_average_path / "dblock")):
-        with open(database_path, 'r+') as f:
-            if database_path.stat().st_size == 0:
-                averages = []
-            else:
-                averages = json.load(f)
-
-            averages = [a for a in averages if not averages_match(a, average)]
-            averages.append(average)
-            f.seek(0)
-            json.dump(averages, f, indent=2, cls=encoder)
-            f.truncate()
-
-
-def collect_task_results(average, N_runs, failed_runs_tolerance, encoder, decoder):
-    parallel_average_path = Path('.') / ".parallel_average"
-    database_path = parallel_average_path / "database.json"
-    job_path = parallel_average_path / average["job_name"]
-    package_path = Path(os.path.abspath(__file__)).parent
-
-    run([f"{package_path}/average_collector.sh", str(job_path.resolve()), str(package_path)])
-
-    with open(average["output"]) as f:
-        json_output = json.load(f, cls=decoder)
-        output = json_output["result"]
-        failed_runs = json_output["failed_runs"]
-
-    if failed_runs:
-        error_message = json_output["error_message"]
-        error_run_id = json_output["error_run_id"]
-
-        message_failed = (
-            f"{len(failed_runs)} / {N_runs} runs failed!\nError message of run {error_run_id}:\n\n" +
-            error_message
-        )
-        if len(failed_runs) > failed_runs_tolerance:
-            raise RuntimeError(message_failed)
-        else:
-            warn(message_failed)
-            average["warning message"] = message_failed
-
-    # average["status"] = "completed"
-    # add_average_to_database(average, encoder)
-
-    return output
+    run([
+        f"{package_path}/submit_job.sh",
+        str(job_path.resolve()),
+        package_path,
+        f"-t 1-{N_tasks} -N {job_name}",
+    ])
 
 
 def parallel_average(
     N_runs,
     N_tasks,
     N_threads=1,
-    average_arrays='all',
-    compute_std='all',
+    average_results='all',
     save_interpreter_state=True,
     ignore_cache=False,
-    async=True,
-    failed_runs_tolerance=0,
     dynamic_load_balancing=False,
     encoder=NumpyEncoder,
     decoder=NumpyDecoder,
@@ -113,37 +180,10 @@ def parallel_average(
             database_path.touch()
 
             if not ignore_cache and database_path.stat().st_size > 0:
-                with SimpleFlock(str(parallel_average_path / "dblock")):
-                    with database_path.open() as f:
-                        averages = json.load(f)
-
-                current_average = cleaned_average(
-                    {
-                        "function_name": function.__name__,
-                        "args": args,
-                        "kwargs": kwargs,
-                        "N_runs": N_runs,
-                        "average_arrays": average_arrays,
-                        "compute_std": compute_std
-                    },
-                    encoder
-                )
-
-                for average in averages:
-                    if averages_match(average, current_average):
-                        if average["status"] == "running":
-                            print("job is still running")
-                            async_result = AsyncResult(average, N_runs, failed_runs_tolerance, encoder=encoder, decoder=decoder)
-                            if async:
-                                return async_result
-                            else:
-                                return async_result.resolve()
-
-                        if "warning message" in average:
-                            warn(average["warning message"])
-                        with open(average["output"]) as f_output:
-                            output = json.load(f_output, cls=decoder)
-                            return output["result"]
+                try:
+                    return load_cached_average(function, args, kwargs, N_runs, average_results, encoder, decoder)
+                except CachedAverageDoesNotExist:
+                    pass
 
             job_name = function.__name__ + str(
                 int(hash(function.__name__) + id(args) + id(kwargs)) % 100000000
@@ -155,154 +195,41 @@ def parallel_average(
             input_path.mkdir(parents=True, exist_ok=True)
 
             if dynamic_load_balancing:
-                N_static_runs = N_runs // 4
-                N_dynamic_runs = N_runs - N_static_runs
-                chunk_size = max(1, N_dynamic_runs // 3 // N_tasks)
-                dynamic_slices = list(range(N_static_runs, N_runs, chunk_size)) + [N_runs]
-                chunks = list(zip(dynamic_slices[:-1], dynamic_slices[1:]))
-                with (input_path / "chunks.json").open('w') as f:
-                    json.dump(chunks, f)
+                N_static_runs = setup_dynamic_load_balancing(N_runs, N_tasks, input_path)
+            else:
+                N_static_runs = None
 
-            with (input_path / "run_task_arguments.json").open('w') as f:
-                json.dump(
-                    {
-                        "N_runs": N_runs,
-                        "N_tasks": N_tasks,
-                        "N_threads": N_threads,
-                        "average_arrays": average_arrays,
-                        "compute_std": compute_std,
-                        "save_interpreter_state": save_interpreter_state,
-                        "dynamic_load_balancing": dynamic_load_balancing,
-                        "N_static_runs": N_static_runs if "N_static_runs" in locals() else None
-                    },
-                    f
-                )
+            setup_task_input_data(
+                input_path, N_runs, N_tasks, N_threads, average_results, save_interpreter_state,
+                dynamic_load_balancing, N_static_runs,
+                function, args, kwargs, encoder
+            )
+            setup_collector_input_data(input_path, average_results, encoder, decoder)
 
-            with (input_path / "run_task.d").open('wb') as f:
-                dill.dump(
-                    {
-                        "function": function,
-                        "args": args,
-                        "kwargs": kwargs,
-                        "encoder": encoder
-                    },
-                    f
-                )
+            if slurm:
+                setup_and_submit_to_slurm(N_tasks, job_name, job_path, queuing_system_options)
+            else:
+                submit_to_sge(N_tasks, job_name, job_path)
 
-            if save_interpreter_state:
-                dill.dump_session(str(input_path / "session.sess"))
-
-            with (job_path / "collector_arguments.d").open('wb') as f:
-                dill.dump(
-                    {
-                        "average_arrays": average_arrays,
-                        "encoder": encoder,
-                        "decoder": decoder
-                    },
-                    f
-                )
-
-            output_path = job_path / "output.json"
             new_average = cleaned_average(
                 {
                     "function_name": function.__name__,
                     "args": args,
                     "kwargs": kwargs,
                     "N_runs": N_runs,
-                    "average_arrays": average_arrays,
-                    "compute_std": compute_std,
-                    "output": str(output_path.resolve()),
+                    "average_results": average_results,
+                    "output": str((job_path / "output.json").resolve()),
                     "job_name": job_name,
                     "status": "running"
                 },
                 encoder
             )
-
-            package_path = str(Path(os.path.abspath(__file__)).parent)
-            if slurm:
-                options = {
-                    "array": f"1-{N_tasks}",
-                    "job-name": job_name,
-                    "chdir": str(job_path.resolve()),
-                    "time": "24:00:00"
-                }
-                options.update(queuing_system_options)
-
-                options_str = ""
-                for name, value in options.items():
-                    if len(name) == 1:
-                        options_str += f"#SBATCH -{name} {value}\n"
-                    else:
-                        options_str += f"#SBATCH --{name}={value}\n"
-
-                job_script_slurm = (
-                    "#!/bin/bash -i\n\n"
-                    f"{options_str.strip()}\n\n"
-                    "WORK_DIR=./$SLURM_ARRAY_TASK_ID\n"
-                    "mkdir -p $WORK_DIR\n"
-                    "module purge\n"
-                    "module load intelpython3\n"
-                    "cd $WORK_DIR\n"
-                    "python $1 $SLURM_ARRAY_TASK_ID\n"
-                )
-
-                with (job_path / "job_script_slurm.sh").open('w') as f:
-                    f.write(job_script_slurm)
-
-                run([
-                    "sbatch",
-                    f"{job_path}/job_script_slurm.sh",
-                    f"{package_path}/run_task.py"
-                ])
-            else:
-                run([
-                    f"{package_path}/submit_job.sh",
-                    str(job_path.resolve()),
-                    package_path,
-                    f"-t 1-{N_tasks} -N {job_name}",
-                ])
-
             add_average_to_database(new_average, encoder)
 
-            async_result = AsyncResult(new_average, N_runs, failed_runs_tolerance, encoder=encoder, decoder=decoder)
-
-            if async:
-                return async_result
-            else:
-                return async_result.resolve()
+            return AsyncResult(new_average, N_runs, encoder=encoder, decoder=decoder)
 
         return wrapper
     return decorator
-
-
-class AsyncResult:
-    def __init__(self, average, *params, encoder, decoder):
-        self.average = average
-        self.params = params
-        self.encoder = encoder
-        self.decoder = decoder
-
-    def resolve(self):
-        if hasattr(self, "output"):
-            return self.output
-
-        job_name = self.average["job_name"]
-
-        # while True:
-        #     result = run(["qstat", "-r"], stdout=PIPE)
-        #     if str(job_name) not in str(result.stdout):
-        #         break
-        #     time.sleep(2)
-
-        self.output = collect_task_results(self.average, *self.params, encoder=self.encoder, decoder=self.decoder)
-
-        return self.output
-
-
-def wait_for_result(async_job):
-    if hasattr(async_job, "resolve"):
-        return async_job.resolve()
-    return async_job
 
 
 def cleanup(remove_running_jobs=False):
@@ -327,61 +254,27 @@ def cleanup(remove_running_jobs=False):
         rmtree(str(parallel_average_path / bad_job))
 
 
-class Database:
-    def __init__(self):
-        self.refresh()
-
-    def refresh(self):
-        database_path = Path('.') / ".parallel_average" / "database.json"
-        if not database_path.exists() or database_path.stat().st_size == 0:
-            self.db = None
-            return
-
-        with database_path.open() as f:
-            self.db = json.load(f, cls=NumpyDecoder)
-
-    @property
-    def function_names(self):
-        if self.db is None:
-            return []
-
-        return sorted(list({average["function_name"] for average in self.db}))
-
-    def query(self, query_string):
-        if self.db is None:
-            return []
-
-        if "objectpath" not in globals():
-            raise ModuleNotFoundError("Please install the `objectpath` library in order to use this function.")
-
-        tree = objectpath.Tree(self.db)
-        return list(tree.execute(query_string))
-
-
-database = Database()
-
-
-def plot_average(time, x, label=None, color=0, points=False, linestyle="-"):
+def plot_average(x, average, label=None, color=0, points=False, linestyle="-"):
     import matplotlib.pyplot as plt
 
     color = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink"][color]
 
     if points:
         plt.errorbar(
-            time,
-            x[0],
-            yerr=x[1],
+            x,
+            average,
+            yerr=average.estimated_error,
             marker="o",
             linestyle="None",
             color=color,
             label=label
         )
     else:
-        plt.plot(time, x[0], label=label, color=color, linestyle=linestyle)
+        plt.plot(x, average, label=label, color=color, linestyle=linestyle)
         plt.fill_between(
-            time,
-            x[0] - x[1],
-            x[0] + x[1],
+            x,
+            average - average.estimated_error,
+            average + average.estimated_error,
             facecolor=color,
             alpha=0.25
         )

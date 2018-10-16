@@ -7,17 +7,17 @@ import dill
 
 task_dirs = [d for d in Path(".").iterdir() if d.is_dir() and str(d).isdigit()]
 
-with open("collector_arguments.d", 'rb') as f:
+with open("input/collector_arguments.d", 'rb') as f:
     arguments = dill.load(f)
 
-average_arrays = arguments["average_arrays"]
+average_results = arguments["average_results"]
 encoder = arguments["encoder"]
 decoder = arguments["decoder"]
 
 result = defaultdict(lambda: 0)
 square_result = defaultdict(lambda: 0)
 
-to_be_averaged = lambda i: average_arrays == 'all' or i in average_arrays
+to_be_averaged = lambda i: average_results == 'all' or i in average_results
 
 failed_runs = []
 error_message = ""
@@ -31,7 +31,7 @@ for task_dir in task_dirs:
 
     try:
         output = json.load(open(task_output_file, 'r'), cls=decoder)
-    except Exception:
+    except FileNotFoundError:
         continue
     if output["failed_runs"]:
         failed_runs += output["failed_runs"]
@@ -64,28 +64,37 @@ if N_total_runs > 0:
         i: (r / total_weights[i] if to_be_averaged(i) and total_weights[i] > 0 else r)
         for i, r in result.items()
     }
-    result = [result[i] for i in sorted(result)]
-
     square_result = {
         i: (r2 / total_weights[i] if total_weights[i] > 0 else 0)
         for i, r2 in square_result.items()
     }
-    for i, r2 in square_result.items():
-        result[i] = [result[i], np.sqrt((r2 - result[i]**2) / (N_total_runs - 1))]
+    if N_total_runs > 1:
+        estimated_error = [
+            np.sqrt((square_result[i] - abs(result[i])**2) / (N_total_runs - 1))
+            for i in sorted(square_result)
+        ]
+    else:
+        estimated_error = None
+
+    result = [result[i] for i in sorted(result)]
 
     if len(result) == 1:
         result = result[0]
 else:
     result = None
+    estimated_error = None
 
 with open("output.json", 'w') as f:
     json.dump(
         {
             "result": result,
+            "estimated_error": estimated_error,
             "failed_runs": failed_runs,
             "error_message": error_message,
-            "error_run_id": error_run_id
+            "error_run_id": error_run_id,
+            "N_total_runs": N_total_runs
         },
         f,
+        indent=2,
         cls=encoder
     )

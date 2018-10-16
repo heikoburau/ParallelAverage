@@ -13,7 +13,7 @@ from ParallelAverage import WeightedSample
 
 task_id = int(sys.argv[1])
 
-to_be_averaged = lambda i: average_arrays == 'all' or i in average_arrays
+to_be_averaged = lambda i: average_results == 'all' or i in average_results
 
 
 with open("../input/run_task_arguments.json", 'r') as f:
@@ -21,8 +21,7 @@ with open("../input/run_task_arguments.json", 'r') as f:
     N_runs = parameters["N_runs"]
     N_tasks = parameters["N_tasks"]
     N_threads = parameters["N_threads"]
-    average_arrays = parameters["average_arrays"]
-    compute_std = parameters["compute_std"]
+    average_results = parameters["average_results"]
     save_interpreter_state = parameters["save_interpreter_state"]
     dynamic_load_balancing = parameters["dynamic_load_balancing"]
     N_static_runs = parameters["N_static_runs"]
@@ -96,12 +95,51 @@ def execute_run(run_id):
 
         if to_be_averaged(i):
             task_result[i] += weight * r if weight > 0 else 0
-            if compute_std == 'all' or (compute_std and i in compute_std):
-                task_square_result[i] += weight * r**2 if weight > 0 else 0
+            task_square_result[i] += weight * abs(r)**2 if weight > 0 else 0
         else:
             task_result[i] = r
 
     N_local_runs += 1
+
+
+def finalized_task_result():
+    if N_local_runs == 0:
+        return None
+
+    return [
+        task_result[i] / local_weights[i] if to_be_averaged(i) and local_weights[i] > 0 else task_result[i]
+        for i in sorted(task_result)
+    ]
+
+
+def finalized_task_square_result():
+    if N_local_runs == 0:
+        return None
+
+    return {
+        i: (r2 / local_weights[i] if local_weights[i] > 0 else 0)
+        for i, r2 in task_square_result.items()
+    }
+
+
+def dump_task_results():
+    with open(f"output_{task_id}.json", 'w') as f:
+        json.dump(
+            {
+                "task_result": finalized_task_result(),
+                "task_square_result": finalized_task_square_result(),
+                "N_local_runs": N_local_runs,
+                "local_weights": local_weights,
+                "failed_runs": failed_runs,
+                "error_message": {
+                    "run_id": failed_runs[-1] if failed_runs else -1,
+                    "message": error_message
+                }
+            },
+            f,
+            indent=2,
+            cls=encoder
+        )
 
 
 task_result = defaultdict(lambda: 0)
@@ -125,37 +163,8 @@ for run_id in run_ids():
     else:
         execute_run(run_id)
 
+    dump_task_results()
+
 if N_threads > 1:
     for thread in active_threads:
         thread.join()
-
-if N_local_runs > 0:
-    task_result = [
-        task_result[i] / local_weights[i] if to_be_averaged(i) and local_weights[i] > 0 else task_result[i]
-        for i in sorted(task_result)
-    ]
-    task_square_result = {
-        i: (r2 / local_weights[i] if local_weights[i] > 0 else 0)
-        for i, r2 in task_square_result.items()
-    }
-else:
-    task_result = None
-    task_square_result = None
-
-with open(f"output_{task_id}.json", 'a') as f:
-    json.dump(
-        {
-            "task_result": task_result,
-            "task_square_result": task_square_result,
-            "N_local_runs": N_local_runs,
-            "local_weights": dict(local_weights),
-            "failed_runs": failed_runs,
-            "error_message": {
-                "run_id": failed_runs[-1] if failed_runs else -1,
-                "message": error_message
-            }
-        },
-        f,
-        indent=2,
-        cls=encoder
-    )
