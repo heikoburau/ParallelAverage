@@ -7,9 +7,9 @@ import json
 
 
 class AsyncResult:
-    def __init__(self, average, N_runs, encoder, decoder):
+    def __init__(self, average, encoder, decoder):
         self.average = average
-        self.N_runs = N_runs
+        self.N_runs = average["N_runs"]
         self.encoder = encoder
         self.decoder = decoder
         self.has_collected = False
@@ -26,9 +26,10 @@ class AsyncResult:
         with open(self.average["output"]) as f:
             json_output = json.load(f, cls=self.decoder)
             self._result = json_output["result"]
-            self._estimated_error = json_output["estimated_error"]
+            self._estimated_error = json_output.get("estimated_error")
+            self._total_weights = json_output.get("total_weights")
             self._failed_runs = json_output["failed_runs"]
-            self._num_completed_runs = json_output["N_total_runs"]
+            self._num_completed_runs = json_output.get("N_total_runs")
 
         if self._failed_runs:
             error_message = json_output["error_message"]
@@ -40,12 +41,13 @@ class AsyncResult:
             )
             warn(message_failed)
 
-        N_running_runs = self.N_runs - (self._num_completed_runs + len(self._failed_runs))
-        if N_running_runs > 0:
-            warn(f"{N_running_runs} / {self.N_runs} runs are still running!")
-        elif self.average["status"] == "running":
-            self.average["status"] = "completed"
-            add_average_to_database(self.average, self.encoder)
+        if self._num_completed_runs is not None:
+            N_running_runs = self.N_runs - (self._num_completed_runs + len(self._failed_runs))
+            if N_running_runs > 0:
+                warn(f"{N_running_runs} / {self.N_runs} runs are still running!")
+            elif self.average["status"] == "running":
+                self.average["status"] = "completed"
+                add_average_to_database(self.average, self.encoder)
 
         self.has_collected = True
 
@@ -62,6 +64,12 @@ class AsyncResult:
         if not self.has_collected:
             self.collect_task_results()
         return self._estimated_error
+
+    @property
+    def total_weight(self):
+        if not self.has_collected:
+            self.collect_task_results()
+        return self._total_weights
 
     @property
     def failed_runs(self):

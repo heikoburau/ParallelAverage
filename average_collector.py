@@ -75,11 +75,14 @@ if N_total_runs > 0:
         ]
     else:
         estimated_error = None
+    total_weights = [total_weights[i] for i in sorted(total_weights)]
 
     result = [result[i] for i in sorted(result)]
-
     if len(result) == 1:
         result = result[0]
+
+    if len(estimated_error) == 1:
+        estimated_error = estimated_error[0]
 else:
     result = None
     estimated_error = None
@@ -89,6 +92,7 @@ with open("output.json", 'w') as f:
         {
             "result": result,
             "estimated_error": estimated_error,
+            "total_weights": total_weights,
             "failed_runs": failed_runs,
             "error_message": error_message,
             "error_run_id": error_run_id,

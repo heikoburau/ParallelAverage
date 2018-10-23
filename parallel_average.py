@@ -1,7 +1,6 @@
-from .database import add_average_to_database
+from .database import add_average_to_database, read_database
 from .AsyncResult import AsyncResult
-from .average_utils import cleaned_average, averages_match
-from .simpleflock import SimpleFlock
+from .average import cleaned_average
 from .json_numpy import NumpyEncoder, NumpyDecoder
 
 import os
@@ -16,30 +15,16 @@ class CachedAverageDoesNotExist(RuntimeError):
     pass
 
 
-def load_cached_average(function, args, kwargs, N_runs, average_results, encoder, decoder):
-    parallel_average_path = Path('.') / ".parallel_average"
-    database_path = parallel_average_path / "database.json"
-
-    current_average = cleaned_average(
-        {
-            "function_name": function.__name__,
-            "args": args,
-            "kwargs": kwargs,
-            "N_runs": N_runs,
-            "average_results": average_results
-        },
-        encoder
-    )
-
-    with SimpleFlock(str(parallel_average_path / "dblock")):
-        with database_path.open() as f:
-            averages = json.load(f)
-
-    for average in averages:
-        if averages_match(average, current_average):
-            return AsyncResult(average, N_runs, encoder=encoder, decoder=decoder).collect_task_results()
+def load_cached_average(current_average, encoder, decoder):
+    for average in read_database():
+        if average == current_average:
+            return AsyncResult(average, encoder=encoder, decoder=decoder).collect_task_results()
 
     raise CachedAverageDoesNotExist()
+
+
+def find_best_fitting_averages_in_database(average):
+    return sorted(read_database(), key=lambda db_average: db_average.distance_to(average))[:3]
 
 
 def setup_dynamic_load_balancing(N_runs, N_tasks, input_path):
@@ -166,6 +151,7 @@ def parallel_average(
     average_results='all',
     save_interpreter_state=True,
     ignore_cache=False,
+    force_caching=False,
     dynamic_load_balancing=False,
     encoder=NumpyEncoder,
     decoder=NumpyDecoder,
@@ -179,14 +165,38 @@ def parallel_average(
             database_path = parallel_average_path / "database.json"
             database_path.touch()
 
+            current_average = cleaned_average(
+                {
+                    "function_name": function.__name__,
+                    "args": args,
+                    "kwargs": kwargs,
+                    "N_runs": N_runs,
+                    "average_results": average_results
+                },
+                encoder
+            )
+
             if not ignore_cache and database_path.stat().st_size > 0:
                 try:
-                    return load_cached_average(function, args, kwargs, N_runs, average_results, encoder, decoder)
+                    return load_cached_average(current_average, encoder, decoder)
                 except CachedAverageDoesNotExist:
-                    pass
+                    if force_caching:
+                        best_fits_str = ""
+                        for best_fit in find_best_fitting_averages_in_database(current_average):
+                            best_fits_str += str(best_fit) + "\n\n"
+
+                        raise CachedAverageDoesNotExist(
+                            f"Best fitting averages in database:\n{best_fits_str}\n"
+                            f"Invoked with:\n{current_average}"
+                        )
 
             job_name = function.__name__ + str(
-                int(hash(function.__name__) + id(args) + id(kwargs)) % 100000000
+                int(
+                    hash(function.__name__) +
+                    sum(hash(arg) for arg in args) +
+                    sum(hash(kwarg) for kwarg in kwargs) +
+                    sum(hash(kwarg) for kwarg in kwargs.values())
+                ) % 100000000
             )
             print("running job-array", job_name)
 
@@ -211,22 +221,13 @@ def parallel_average(
             else:
                 submit_to_sge(N_tasks, job_name, job_path)
 
-            new_average = cleaned_average(
-                {
-                    "function_name": function.__name__,
-                    "args": args,
-                    "kwargs": kwargs,
-                    "N_runs": N_runs,
-                    "average_results": average_results,
-                    "output": str((job_path / "output.json").resolve()),
-                    "job_name": job_name,
-                    "status": "running"
-                },
-                encoder
-            )
-            add_average_to_database(new_average, encoder)
+            current_average["output"] = str((job_path / "output.json").resolve())
+            current_average["job_name"] = job_name
+            current_average["status"] = "running"
 
-            return AsyncResult(new_average, N_runs, encoder=encoder, decoder=decoder)
+            add_average_to_database(current_average, encoder)
+
+            return AsyncResult(current_average, encoder=encoder, decoder=decoder)
 
         return wrapper
     return decorator

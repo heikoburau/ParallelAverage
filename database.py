@@ -1,4 +1,4 @@
-from .average_utils import averages_match
+from .average import Average
 from .simpleflock import SimpleFlock
 from .json_numpy import NumpyDecoder
 from pathlib import Path
@@ -7,6 +7,17 @@ try:
     import objectpath
 except ImportError:
     pass
+
+
+def read_database():
+    parallel_average_path = Path('.') / ".parallel_average"
+    database_path = parallel_average_path / "database.json"
+
+    with SimpleFlock(str(parallel_average_path / "dblock")):
+        with database_path.open() as f:
+            averages = json.load(f)
+
+    return [Average(average) for average in averages]
 
 
 def add_average_to_database(average, encoder):
@@ -20,7 +31,9 @@ def add_average_to_database(average, encoder):
             else:
                 averages = json.load(f)
 
-            averages = [a for a in averages if not averages_match(a, average)]
+            averages = [Average(average) for average in averages]
+
+            averages = [a for a in averages if a != average]
             averages.append(average)
             f.seek(0)
             json.dump(averages, f, indent=2, cls=encoder)
