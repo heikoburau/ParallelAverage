@@ -28,6 +28,9 @@ class Average(dict):
                 "function_name", "args", "kwargs", "N_runs", "average_results"
             ])
 
+    def __ne__(self, other):
+        return not self == other
+
     def __str__(self):
         average_results = self['average_results'] if 'average_results' in self else (
             self['average_arrays'] if 'average_arrays' in self else None

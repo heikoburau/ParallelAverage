@@ -196,7 +196,7 @@ def parallel_average(
                     sum(hash(arg) for arg in args) +
                     sum(hash(kwarg) for kwarg in kwargs) +
                     sum(hash(kwarg) for kwarg in kwargs.values())
-                ) % 100000000
+                ) % 1000000000
             )
             print("running job-array", job_name)
 
@@ -255,7 +255,7 @@ def cleanup(remove_running_jobs=False):
         rmtree(str(parallel_average_path / bad_job))
 
 
-def plot_average(x, average, label=None, color=0, points=False, linestyle="-"):
+def plot_average(x, average, label=None, color=0, points=False, linestyle="-", alpha=1):
     import matplotlib.pyplot as plt
 
     color = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink"][color]
@@ -268,16 +268,17 @@ def plot_average(x, average, label=None, color=0, points=False, linestyle="-"):
             marker="o",
             linestyle="None",
             color=color,
-            label=label
+            label=label,
+            alpha=alpha
         )
     else:
-        plt.plot(x, average, label=label, color=color, linestyle=linestyle)
+        plt.plot(x, average, label=label, color=color, linestyle=linestyle, alpha=alpha)
         plt.fill_between(
             x,
             average - average.estimated_error,
             average + average.estimated_error,
             facecolor=color,
-            alpha=0.25
+            alpha=0.25*alpha
         )
 
 
