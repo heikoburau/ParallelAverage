@@ -6,6 +6,7 @@ from .json_numpy import NumpyEncoder, NumpyDecoder
 import os
 import json
 import dill
+import re
 from subprocess import run
 from pathlib import Path
 from shutil import rmtree
@@ -144,6 +145,18 @@ def submit_to_sge(N_tasks, job_name, job_path):
     ])
 
 
+def largest_existing_job_index():
+    parallel_average_path = Path('.') / ".parallel_average"
+
+    dirs_starting_with_a_number = [
+        d.name for d in parallel_average_path.iterdir() if d.is_dir() and d.name[:1].isdigit()
+    ]
+    if not dirs_starting_with_a_number:
+        return None
+
+    return max(int(re.search(r"\d+", dir_str).group()) for dir_str in dirs_starting_with_a_number)
+
+
 def parallel_average(
     N_runs,
     N_tasks,
@@ -190,14 +203,8 @@ def parallel_average(
                             f"Invoked with:\n{current_average}"
                         )
 
-            job_name = function.__name__ + str(
-                int(
-                    hash(function.__name__) +
-                    sum(hash(arg) for arg in args) +
-                    sum(hash(kwarg) for kwarg in kwargs) +
-                    sum(hash(kwarg) for kwarg in kwargs.values())
-                ) % 1000000000
-            )
+            job_index = (largest_existing_job_index() or 0) + 1
+            job_name = f"{job_index}_{function.__name__}"
             print("running job-array", job_name)
 
             job_path = parallel_average_path / job_name
@@ -255,10 +262,14 @@ def cleanup(remove_running_jobs=False):
         rmtree(str(parallel_average_path / bad_job))
 
 
-def plot_average(x, average, label=None, color=0, points=False, linestyle="-", alpha=1):
+def plot_average(x, average, label=None, color=0, points=False, linestyle="-", alpha=None, cmap="CMRmap_r"):
     import matplotlib.pyplot as plt
 
-    color = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink"][color]
+    if type(color) is int:
+        color = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink"][color]
+    elif type(color) is float:
+        from matplotlib.cm import ScalarMappable
+        color = ScalarMappable(cmap=cmap).to_rgba(color, norm=False)
 
     if points:
         plt.errorbar(
@@ -278,7 +289,7 @@ def plot_average(x, average, label=None, color=0, points=False, linestyle="-", a
             average - average.estimated_error,
             average + average.estimated_error,
             facecolor=color,
-            alpha=0.25*alpha
+            alpha=0.25 * (alpha or 1)
         )
 
 
