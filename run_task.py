@@ -1,12 +1,11 @@
+import os
 import sys
-import numpy as np
 import json
 import dill
 import time as time_mod
 import random
 import threading
 from collections import defaultdict
-from pathlib import Path
 from simpleflock import SimpleFlock
 from ParallelAverage import WeightedSample
 
@@ -18,6 +17,7 @@ to_be_averaged = lambda i: average_results == 'all' or i in average_results
 
 with open("../input/run_task_arguments.json", 'r') as f:
     parameters = json.load(f)
+    job_name = parameters["job_name"]
     N_runs = parameters["N_runs"]
     N_tasks = parameters["N_tasks"]
     N_threads = parameters["N_threads"]
@@ -33,6 +33,8 @@ function = run_task["function"]
 args = run_task["args"]
 kwargs = run_task["kwargs"]
 encoder = run_task["encoder"]
+
+os.environ["JOB_NAME"] = job_name
 
 if save_interpreter_state:
     dill.load_session("../input/session.sess")
@@ -67,19 +69,19 @@ def run_ids():
 def execute_run(run_id):
     global task_result, task_square_result, N_local_runs, local_weights, failed_runs, error_message
 
-    try:
-        with open("../progress.txt", "a") as f:
-            f.write(str(run_id) + "\n")
-    except Exception:
-        print("Error while writing to progress.txt")
-
-    kwargs["run_id"] = run_id
+    os.environ["RUN_ID"] = str(run_id)
     try:
         result = function(*args, **kwargs)
     except Exception as e:
         failed_runs.append(run_id)
         error_message = type(e).__name__ + ": " + str(e)
         return
+
+    try:
+        with open("../progress.txt", "a") as f:
+            f.write(str(run_id) + "\n")
+    except Exception:
+        print("Error while writing to progress.txt")
 
     if not isinstance(result, (list, tuple)):
         result = [result]

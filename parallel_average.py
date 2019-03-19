@@ -41,6 +41,7 @@ def setup_dynamic_load_balancing(N_runs, N_tasks, input_path):
 
 
 def setup_task_input_data(
+    job_name,
     input_path,
     N_runs,
     N_tasks,
@@ -57,6 +58,7 @@ def setup_task_input_data(
     with (input_path / "run_task_arguments.json").open('w') as f:
         json.dump(
             {
+                "job_name": job_name,
                 "N_runs": N_runs,
                 "N_tasks": N_tasks,
                 "N_threads": N_threads,
@@ -217,7 +219,7 @@ def parallel_average(
                 N_static_runs = None
 
             setup_task_input_data(
-                input_path, N_runs, N_tasks, N_threads, average_results, save_interpreter_state,
+                job_name, input_path, N_runs, N_tasks, N_threads, average_results, save_interpreter_state,
                 dynamic_load_balancing, N_static_runs,
                 function, args, kwargs, encoder
             )
@@ -240,7 +242,7 @@ def parallel_average(
     return decorator
 
 
-def cleanup(remove_running_jobs=False):
+def cleanup(remove_running_jobs=False, remove_intermediate_files_of_completed_jobs=False):
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
     if not database_path.exists() or database_path.stat().st_size == 0:
@@ -254,6 +256,21 @@ def cleanup(remove_running_jobs=False):
             json.dump(database_json, f, indent=2)
             f.truncate()
 
+    if remove_intermediate_files_of_completed_jobs:
+        completed_jobs = [average for average in database_json if average["status"] == "completed"]
+        for average in completed_jobs:
+            job_dir = parallel_average_path / average["job_name"]
+            dirs_starting_with_a_number = [
+                d for d in job_dir.iterdir() if d.is_dir() and d.name[:1].isdigit()
+            ]
+            for dir_ in dirs_starting_with_a_number:
+                rmtree(str(dir_))
+            out_files = [
+                f for f in job_dir.iterdir() if f.name.endswith(".out")
+            ]
+            for out_file in out_files:
+                out_file.unlink()
+
     database_jobs = {average["job_name"] for average in database_json}
     existing_jobs = {job.name for job in parallel_average_path.iterdir() if job.is_dir()}
     bad_jobs = existing_jobs - database_jobs
@@ -262,7 +279,10 @@ def cleanup(remove_running_jobs=False):
         rmtree(str(parallel_average_path / bad_job))
 
 
-def plot_average(x, average, label=None, color=0, points=False, linestyle="-", alpha=None, cmap="CMRmap_r"):
+def plot_average(
+    x, average, label=None, color=0, points=False, linestyle="-", alpha=None, cmap="CMRmap_r",
+    estimated_error=None
+):
     import matplotlib.pyplot as plt
 
     if type(color) is int:
@@ -271,11 +291,14 @@ def plot_average(x, average, label=None, color=0, points=False, linestyle="-", a
         from matplotlib.cm import ScalarMappable
         color = ScalarMappable(cmap=cmap).to_rgba(color, norm=False)
 
+    if estimated_error is None:
+        estimated_error = average.estimated_error
+
     if points:
         plt.errorbar(
             x,
             average,
-            yerr=average.estimated_error,
+            yerr=estimated_error,
             marker="o",
             linestyle="None",
             color=color,
@@ -286,8 +309,8 @@ def plot_average(x, average, label=None, color=0, points=False, linestyle="-", a
         plt.plot(x, average, label=label, color=color, linestyle=linestyle, alpha=alpha)
         plt.fill_between(
             x,
-            average - average.estimated_error,
-            average + average.estimated_error,
+            average - estimated_error,
+            average + estimated_error,
             facecolor=color,
             alpha=0.25 * (alpha or 1)
         )

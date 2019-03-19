@@ -23,7 +23,6 @@ def read_database():
 def add_average_to_database(average, encoder):
     parallel_average_path = Path('.') / ".parallel_average"
     database_path = parallel_average_path / "database.json"
-
     with SimpleFlock(str(parallel_average_path / "dblock")):
         with open(database_path, 'r+') as f:
             if database_path.stat().st_size == 0:
