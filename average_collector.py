@@ -73,6 +73,10 @@ if N_total_runs > 0:
             np.sqrt((square_result[i] - abs(result[i])**2) / (N_total_runs - 1))
             for i in sorted(square_result)
         ]
+        estimated_variance = [
+            N_total_runs / (N_total_runs - 1) * (square_result[i] - abs(result[i])**2)
+            for i in sorted(square_result)
+        ]
     else:
         estimated_error = None
     total_weights = [total_weights[i] for i in sorted(total_weights)]
@@ -83,15 +87,19 @@ if N_total_runs > 0:
 
     if len(estimated_error) == 1:
         estimated_error = estimated_error[0]
+    if len(estimated_variance) == 1:
+        estimated_variance = estimated_variance[0]
 else:
     result = None
     estimated_error = None
+    estimated_variance = None
 
 with open("output.json", 'w') as f:
     json.dump(
         {
             "result": result,
             "estimated_error": estimated_error,
+            "estimated_variance": estimated_variance,
             "total_weights": total_weights,
             "failed_runs": failed_runs,
             "error_message": error_message,

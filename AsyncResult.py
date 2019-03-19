@@ -13,9 +13,13 @@ class AsyncResult:
         self.encoder = encoder
         self.decoder = decoder
         self.has_collected = False
+        self.is_complete = False
         self._result = None
 
     def collect_task_results(self):
+        if self.is_complete:
+            return self
+
         parallel_average_path = Path('.') / ".parallel_average"
         job_path = parallel_average_path / self.average["job_name"]
         package_path = Path(os.path.abspath(__file__)).parent
@@ -27,6 +31,7 @@ class AsyncResult:
             json_output = json.load(f, cls=self.decoder)
             self._result = json_output["result"]
             self._estimated_error = json_output.get("estimated_error")
+            self._estimated_variance = json_output.get("estimated_variance")
             self._total_weights = json_output.get("total_weights")
             self._failed_runs = json_output["failed_runs"]
             self._num_completed_runs = json_output.get("N_total_runs")
@@ -43,6 +48,8 @@ class AsyncResult:
 
         if self._num_completed_runs is not None:
             N_running_runs = self.N_runs - (self._num_completed_runs + len(self._failed_runs))
+            if N_running_runs == 0:
+                self.is_complete = True
             if N_running_runs > 0:
                 warn(f"{N_running_runs} / {self.N_runs} runs are still running!")
             elif self.average["status"] == "running":
@@ -66,6 +73,12 @@ class AsyncResult:
         return self._estimated_error
 
     @property
+    def estimated_variance(self):
+        if not self.has_collected:
+            self.collect_task_results()
+        return self._estimated_variance
+
+    @property
     def total_weight(self):
         if not self.has_collected:
             self.collect_task_results()
@@ -73,14 +86,12 @@ class AsyncResult:
 
     @property
     def failed_runs(self):
-        if not self.has_collected:
-            self.collect_task_results()
+        self.collect_task_results()
         return self._failed_runs
 
     @property
     def num_completed_runs(self):
-        if not self.has_collected:
-            self.collect_task_results()
+        self.collect_task_results()
         return self._num_completed_runs
 
     def __getstate__(self):
