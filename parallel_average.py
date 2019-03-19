@@ -116,7 +116,7 @@ def setup_and_submit_to_slurm(N_tasks, job_name, job_path, queuing_system_option
             options_str += f"#SBATCH --{name}={value}\n"
 
     job_script_slurm = (
-        "#!/bin/bash -i\n\n"
+        "#!/bin/bash\n\n"
         f"{options_str.strip()}\n\n"
         "WORK_DIR=./$SLURM_ARRAY_TASK_ID\n"
         "mkdir -p $WORK_DIR\n"
