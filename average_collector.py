@@ -79,15 +79,17 @@ if N_total_runs > 0:
         ]
     else:
         estimated_error = None
+        estimated_variance = None
+
     total_weights = [total_weights[i] for i in sorted(total_weights)]
 
     result = [result[i] for i in sorted(result)]
     if len(result) == 1:
         result = result[0]
 
-    if len(estimated_error) == 1:
+    if estimated_error is not None and len(estimated_error) == 1:
         estimated_error = estimated_error[0]
-    if len(estimated_variance) == 1:
+    if estimated_variance is not None and len(estimated_variance) == 1:
         estimated_variance = estimated_variance[0]
 else:
     result = None
