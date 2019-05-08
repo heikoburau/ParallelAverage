@@ -104,7 +104,6 @@ def setup_and_submit_to_slurm(N_tasks, job_name, job_path, queuing_system_option
         "array": f"1-{N_tasks}",
         "job-name": job_name,
         "chdir": str(job_path.resolve()),
-        "time": "24:00:00"
     }
     options.update(queuing_system_options)
 
