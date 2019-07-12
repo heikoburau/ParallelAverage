@@ -10,22 +10,27 @@ import re
 from subprocess import run
 from pathlib import Path
 from shutil import rmtree
+from datetime import datetime
+
+
+package_path = Path(os.path.abspath(__file__)).parent
+config_path = Path.home() / ".config/ParallelAverage"
 
 
 class CachedAverageDoesNotExist(RuntimeError):
     pass
 
 
-def load_cached_average(current_average, encoder, decoder):
-    for average in read_database():
+def load_cached_average(path, current_average, encoder, decoder):
+    for average in read_database(path):
         if average == current_average:
-            return AsyncResult(average, encoder=encoder, decoder=decoder).collect_task_results()
+            return AsyncResult(path, average, encoder=encoder, decoder=decoder).collect_task_results()
 
     raise CachedAverageDoesNotExist()
 
 
-def find_best_fitting_averages_in_database(average):
-    return sorted(read_database(), key=lambda db_average: db_average.distance_to(average))[:3]
+def find_best_fitting_averages_in_database(path, average):
+    return sorted(read_database(path), key=lambda db_average: db_average.distance_to(average))[:3]
 
 
 def setup_dynamic_load_balancing(N_runs, N_tasks, input_path):
@@ -97,33 +102,29 @@ def setup_collector_input_data(input_path, average_results, encoder, decoder):
         )
 
 
-def setup_and_submit_to_slurm(N_tasks, job_name, job_path, queuing_system_options):
-    package_path = str(Path(os.path.abspath(__file__)).parent)
-
+def setup_and_submit_to_slurm(N_tasks, job_name, job_path, user_options):
     options = {
         "array": f"1-{N_tasks}",
         "job-name": job_name,
         "chdir": str(job_path.resolve()),
     }
-    options.update(queuing_system_options)
+    options.update(user_options)
 
     options_str = ""
     for name, value in options.items():
+        name = name.replace('_', '-')
         if len(name) == 1:
             options_str += f"#SBATCH -{name} {value}\n"
         else:
             options_str += f"#SBATCH --{name}={value}\n"
 
-    job_script_slurm = (
-        "#!/bin/bash\n\n"
-        f"{options_str.strip()}\n\n"
-        "WORK_DIR=./$SLURM_ARRAY_TASK_ID\n"
-        "mkdir -p $WORK_DIR\n"
-        "module purge\n"
-        "module load intelpython3\n"
-        "cd $WORK_DIR\n"
-        "python $1 $SLURM_ARRAY_TASK_ID\n"
-    )
+    template_file_name = "job_script_slurm.template"
+    template_file = config_path / template_file_name
+    if not template_file.exists():
+        template_file = package_path / template_file_name
+
+    with (template_file).open('r') as f:
+        job_script_slurm = f.read().format(slurm_options=options_str)
 
     with (job_path / "job_script_slurm.sh").open('w') as f:
         f.write(job_script_slurm)
@@ -135,20 +136,7 @@ def setup_and_submit_to_slurm(N_tasks, job_name, job_path, queuing_system_option
     ])
 
 
-def submit_to_sge(N_tasks, job_name, job_path):
-    package_path = str(Path(os.path.abspath(__file__)).parent)
-
-    run([
-        f"{package_path}/submit_job.sh",
-        str(job_path.resolve()),
-        package_path,
-        f"-t 1-{N_tasks} -N {job_name}",
-    ])
-
-
-def largest_existing_job_index():
-    parallel_average_path = Path('.') / ".parallel_average"
-
+def largest_existing_job_index(parallel_average_path):
     dirs_starting_with_a_number = [
         d.name for d in parallel_average_path.iterdir() if d.is_dir() and d.name[:1].isdigit()
     ]
@@ -169,14 +157,15 @@ def parallel_average(
     dynamic_load_balancing=False,
     encoder=NumpyEncoder,
     decoder=NumpyDecoder,
-    slurm=False,
+    path=".",
+    queuing_system="Slurm",
     **queuing_system_options
 ):
     def decorator(function):
         def wrapper(*args, **kwargs):
-            parallel_average_path = Path('.') / ".parallel_average"
+            parallel_average_path = Path(path) / ".parallel_average"
             parallel_average_path.mkdir(exist_ok=True)
-            database_path = parallel_average_path / "database.json"
+            database_path = Path(path) / "parallel_average_database.json"
             database_path.touch()
 
             current_average = cleaned_average(
@@ -192,11 +181,11 @@ def parallel_average(
 
             if not ignore_cache and database_path.stat().st_size > 0:
                 try:
-                    return load_cached_average(current_average, encoder, decoder)
+                    return load_cached_average(path, current_average, encoder, decoder)
                 except CachedAverageDoesNotExist:
                     if force_caching:
                         best_fits_str = ""
-                        for best_fit in find_best_fitting_averages_in_database(current_average):
+                        for best_fit in find_best_fitting_averages_in_database(path, current_average):
                             best_fits_str += str(best_fit) + "\n\n"
 
                         raise CachedAverageDoesNotExist(
@@ -204,7 +193,7 @@ def parallel_average(
                             f"Invoked with:\n{current_average}"
                         )
 
-            job_index = (largest_existing_job_index() or 0) + 1
+            job_index = (largest_existing_job_index(parallel_average_path) or 0) + 1
             job_name = f"{job_index}_{function.__name__}"
             print("running job-array", job_name)
 
@@ -224,26 +213,31 @@ def parallel_average(
             )
             setup_collector_input_data(input_path, average_results, encoder, decoder)
 
-            if slurm:
+            if queuing_system == "Slurm":
                 setup_and_submit_to_slurm(N_tasks, job_name, job_path, queuing_system_options)
             else:
-                submit_to_sge(N_tasks, job_name, job_path)
+                raise ValueError(f"Unknown queuing_system: {queuing_system}. By now, only 'Slurm' is supported.")
 
             current_average["output"] = str((job_path / "output.json").resolve())
             current_average["job_name"] = job_name
             current_average["status"] = "running"
+            current_average["datetime"] = datetime.now().isoformat()
 
-            add_average_to_database(current_average, encoder)
+            add_average_to_database(path, current_average, encoder)
 
-            return AsyncResult(current_average, encoder=encoder, decoder=decoder)
+            return AsyncResult(path, current_average, encoder=encoder, decoder=decoder)
 
         return wrapper
     return decorator
 
 
-def cleanup(remove_running_jobs=False, remove_intermediate_files_of_completed_jobs=False):
-    parallel_average_path = Path('.') / ".parallel_average"
-    database_path = parallel_average_path / "database.json"
+def cleanup(
+    remove_running_jobs=False,
+    remove_intermediate_files_of_completed_jobs=False,
+    path="."
+):
+    parallel_average_path = Path(path) / ".parallel_average"
+    database_path = Path(path) / "parallel_average_database.json"
     if not database_path.exists() or database_path.stat().st_size == 0:
         return
 

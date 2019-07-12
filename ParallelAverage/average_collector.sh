@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 JOB_DIR=$1
 PACKAGE_DIR=$2
 

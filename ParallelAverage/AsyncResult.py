@@ -6,8 +6,13 @@ import os
 import json
 
 
+package_path = Path(os.path.abspath(__file__)).parent
+config_path = Path.home() / ".config/ParallelAverage"
+
+
 class AsyncResult:
-    def __init__(self, average, encoder, decoder):
+    def __init__(self, path, average, encoder, decoder):
+        self.path = Path(path)
         self.average = average
         self.N_runs = average["N_runs"]
         self.encoder = encoder
@@ -20,12 +25,15 @@ class AsyncResult:
         if self.is_complete:
             return self
 
-        parallel_average_path = Path('.') / ".parallel_average"
+        parallel_average_path = self.path / ".parallel_average"
         job_path = parallel_average_path / self.average["job_name"]
-        package_path = Path(os.path.abspath(__file__)).parent
 
         if self.average["status"] == "running":
-            run([f"{package_path}/average_collector.sh", str(job_path.resolve()), str(package_path)])
+            average_collector_file = config_path / "average_collector.sh"
+            if not average_collector_file.exists():
+                average_collector_file = package_path / "average_collector.sh"
+
+            run([str(average_collector_file), str(job_path.resolve()), str(package_path)])
 
         with open(self.average["output"]) as f:
             json_output = json.load(f, cls=self.decoder)
@@ -54,7 +62,7 @@ class AsyncResult:
                 warn(f"{N_running_runs} / {self.N_runs} runs are still running!")
             elif self.average["status"] == "running":
                 self.average["status"] = "completed"
-                add_average_to_database(self.average, self.encoder)
+                add_average_to_database(self.path, self.average, self.encoder)
 
         self.has_collected = True
 
