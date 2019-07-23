@@ -8,14 +8,19 @@ import threading
 from collections import defaultdict
 from simpleflock import SimpleFlock
 from ParallelAverage import WeightedSample
+from pathlib import Path
 
 
 task_id = int(sys.argv[1])
+work_dir = Path(sys.argv[2])
+job_dir = work_dir.parent
+input_dir = job_dir / "input"
+
 
 to_be_averaged = lambda i: average_results == 'all' or i in average_results
 
 
-with open("../input/run_task_arguments.json", 'r') as f:
+with open(input_dir / "run_task_arguments.json", 'r') as f:
     parameters = json.load(f)
     job_name = parameters["job_name"]
     N_runs = parameters["N_runs"]
@@ -26,7 +31,7 @@ with open("../input/run_task_arguments.json", 'r') as f:
     dynamic_load_balancing = parameters["dynamic_load_balancing"]
     N_static_runs = parameters["N_static_runs"]
 
-with open("../input/run_task.d", 'rb') as f:
+with open(input_dir / "run_task.d", 'rb') as f:
     run_task = dill.load(f)
 
 function = run_task["function"]
@@ -37,7 +42,7 @@ encoder = run_task["encoder"]
 os.environ["JOB_NAME"] = job_name
 
 if save_interpreter_state:
-    dill.load_session("../input/session.sess")
+    dill.load_session(str(input_dir / "session.sess"))
 
 
 def run_ids():
@@ -47,8 +52,8 @@ def run_ids():
             chunk = None
             while chunk is None:
                 try:
-                    with SimpleFlock("../input/chunks_lock"):
-                        with open("../input/chunks.json", 'r+') as f:
+                    with SimpleFlock(str(input_dir / "chunks_lock")):
+                        with open(input_dir / "chunks.json", 'r+') as f:
                             chunks = json.load(f)
                             if not chunks:
                                 return
@@ -78,7 +83,7 @@ def execute_run(run_id):
         return
 
     try:
-        with open("../progress.txt", "a") as f:
+        with open(job_dir / "progress.txt", "a") as f:
             f.write(str(run_id) + "\n")
     except Exception:
         print("Error while writing to progress.txt")
@@ -125,7 +130,7 @@ def finalized_task_square_result():
 
 
 def dump_task_results():
-    with open(f"output_{task_id}.json", 'w') as f:
+    with open(work_dir / f"output_{task_id}.json", 'w') as f:
         json.dump(
             {
                 "task_result": finalized_task_result(),

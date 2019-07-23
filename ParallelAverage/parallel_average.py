@@ -132,7 +132,8 @@ def setup_and_submit_to_slurm(N_tasks, job_name, job_path, user_options):
     run([
         "sbatch",
         f"{job_path}/job_script_slurm.sh",
-        f"{package_path}/run_task.py"
+        f"{package_path}/run_task.py",
+        str(Path(".").resolve())
     ])
 
 
@@ -216,7 +217,7 @@ def parallel_average(
             if queuing_system == "Slurm":
                 setup_and_submit_to_slurm(N_tasks, job_name, job_path, queuing_system_options)
             else:
-                raise ValueError(f"Unknown queuing_system: {queuing_system}. By now, only 'Slurm' is supported.")
+                raise ValueError(f"Unknown queuing_system: {queuing_system}. Until now, only 'Slurm' is supported.")
 
             current_average["output"] = str((job_path / "output.json").resolve())
             current_average["job_name"] = job_name
