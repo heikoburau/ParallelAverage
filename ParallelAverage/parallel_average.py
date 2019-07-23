@@ -176,6 +176,8 @@ def parallel_average(
             if dont_submit:
                 del kwargs[dont_submit_argname]
 
+            assert N_runs >= 1, "'N_runs' has to be one or greater than one."
+
             parallel_average_path = Path(path) / ".parallel_average"
             parallel_average_path.mkdir(exist_ok=True)
             database_path = Path(path) / "parallel_average_database.json"
@@ -207,6 +209,9 @@ def parallel_average(
                         )
             if dont_submit:
                 return
+
+            assert N_tasks <= N_runs, "'N_tasks' has to be less than or equal to 'N_runs'."
+            assert N_tasks >= 1, "'N_tasks' has to be one or greater than one."
 
             job_index = (largest_existing_job_index(parallel_average_path) or 0) + 1
             job_name = f"{job_index}_{function.__name__}"
