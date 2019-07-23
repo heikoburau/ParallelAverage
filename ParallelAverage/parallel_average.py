@@ -11,10 +11,13 @@ from subprocess import run
 from pathlib import Path
 from shutil import rmtree
 from datetime import datetime
+from functools import wraps
 
 
 package_path = Path(os.path.abspath(__file__)).parent
 config_path = Path.home() / ".config/ParallelAverage"
+do_submit_argname = "__parallel_average_do_submit__"
+dont_submit_argname = "__parallel_average_dont_submit__"
 
 
 class CachedAverageDoesNotExist(RuntimeError):
@@ -153,8 +156,8 @@ def parallel_average(
     N_threads=1,
     average_results='all',
     save_interpreter_state=True,
-    ignore_cache=False,
-    force_caching=False,
+    ignore_cache=False,  # deprecated
+    force_caching=False,  # deprecated
     dynamic_load_balancing=False,
     encoder=NumpyEncoder,
     decoder=NumpyDecoder,
@@ -163,7 +166,16 @@ def parallel_average(
     **queuing_system_options
 ):
     def decorator(function):
+        @wraps(function)
         def wrapper(*args, **kwargs):
+            do_submit = do_submit_argname in kwargs
+            dont_submit = dont_submit_argname in kwargs
+            assert not (do_submit and dont_submit), "Both using 'do_submit' and 'dont_submit' is bullshit."
+            if do_submit:
+                del kwargs[do_submit_argname]
+            if dont_submit:
+                del kwargs[dont_submit_argname]
+
             parallel_average_path = Path(path) / ".parallel_average"
             parallel_average_path.mkdir(exist_ok=True)
             database_path = Path(path) / "parallel_average_database.json"
@@ -180,11 +192,11 @@ def parallel_average(
                 encoder
             )
 
-            if not ignore_cache and database_path.stat().st_size > 0:
+            if not do_submit and not ignore_cache and database_path.stat().st_size > 0:
                 try:
                     return load_cached_average(path, current_average, encoder, decoder)
                 except CachedAverageDoesNotExist:
-                    if force_caching:
+                    if dont_submit or force_caching:
                         best_fits_str = ""
                         for best_fit in find_best_fitting_averages_in_database(path, current_average):
                             best_fits_str += str(best_fit) + "\n\n"
@@ -193,6 +205,8 @@ def parallel_average(
                             f"Best fitting averages in database:\n{best_fits_str}\n"
                             f"Invoked with:\n{current_average}"
                         )
+            if dont_submit:
+                return
 
             job_index = (largest_existing_job_index(parallel_average_path) or 0) + 1
             job_name = f"{job_index}_{function.__name__}"
@@ -230,6 +244,24 @@ def parallel_average(
 
         return wrapper
     return decorator
+
+
+def do_submit(wrapper):
+    @wraps(wrapper)
+    def f(*args, **kwargs):
+        kwargs[do_submit_argname] = True
+        return wrapper(*args, **kwargs)
+
+    return f
+
+
+def dont_submit(wrapper):
+    @wraps(wrapper)
+    def f(*args, **kwargs):
+        kwargs[dont_submit_argname] = True
+        return wrapper(*args, **kwargs)
+
+    return f
 
 
 def cleanup(
