@@ -1,19 +1,33 @@
+"""
+This file executes a single task. It should not be aware of any other tasks belonging to the same job.
+It's responsibility is to execute a specific amount of runs and to (optionally) compute their average.
+In addition it may also want to save each run's result in a task-related file.
+A task decides on its own the run_ids it will manage and when it's done.
+
+Command-line arguments
+======================
+
+1: task id
+2: working directory of job
+
+"""
+
+
 import os
 import sys
 import json
 import dill
 import time as time_mod
 import random
-import threading
 from collections import defaultdict
 from simpleflock import SimpleFlock
-from ParallelAverage import WeightedSample
 from pathlib import Path
+from .Dataset import Dataset
 
 
 task_id = int(sys.argv[1])
-work_dir = Path(sys.argv[2])
-job_dir = work_dir.parent
+job_dir = Path(sys.argv[2])
+data_dir = job_dir / "data_output"
 input_dir = job_dir / "input"
 
 
@@ -25,11 +39,11 @@ with open(input_dir / "run_task_arguments.json", 'r') as f:
     job_name = parameters["job_name"]
     N_runs = parameters["N_runs"]
     N_tasks = parameters["N_tasks"]
-    N_threads = parameters["N_threads"]
     average_results = parameters["average_results"]
     save_interpreter_state = parameters["save_interpreter_state"]
     dynamic_load_balancing = parameters["dynamic_load_balancing"]
     N_static_runs = parameters["N_static_runs"]
+    keep_runs = parameters["keep_runs"]
 
 with open(input_dir / "run_task.d", 'rb') as f:
     run_task = dill.load(f)
@@ -72,15 +86,14 @@ def run_ids():
 
 
 def execute_run(run_id):
-    global task_result, task_square_result, N_local_runs, local_weights, failed_runs, error_message
+    global error_message
 
     os.environ["RUN_ID"] = str(run_id)
     try:
         result = function(*args, **kwargs)
     except Exception as e:
-        failed_runs.append(run_id)
         error_message = type(e).__name__ + ": " + str(e)
-        return
+        return None
 
     try:
         with open(job_dir / "progress.txt", "a") as f:
@@ -91,57 +104,40 @@ def execute_run(run_id):
     if not isinstance(result, (list, tuple)):
         result = [result]
 
-    for i, r in enumerate(result):
-        if isinstance(r, WeightedSample):
-            weight = r.weight
-            r = r.sample
+    return result
+
+
+def dump_result_of_single_run(run_id, result):
+    runs_of_task = data_dir / f"{task_id}_raw_results.json"
+    with open(runs_of_task, 'r+') as f:
+        if runs_of_task.stat().st_size == 0:
+            runs = []
         else:
-            weight = 1
+            runs = json.load(f)
 
-        local_weights[i] += weight
+        runs[run_id] = result
 
-        if to_be_averaged(i):
-            task_result[i] += weight * r if weight > 0 else 0
-            task_square_result[i] += weight * abs(r)**2 if weight > 0 else 0
-        else:
-            task_result[i] = r
-
-    N_local_runs += 1
+        f.seek(0)
+        json.dump(runs, f, indent=2, cls=encoder)
+        f.truncate()
 
 
-def finalized_task_result():
-    if N_local_runs == 0:
-        return None
-
-    return [
-        task_result[i] / local_weights[i] if to_be_averaged(i) and local_weights[i] > 0 else task_result[i]
-        for i in sorted(task_result)
-    ]
-
-
-def finalized_task_square_result():
-    if N_local_runs == 0:
-        return None
-
-    return {
-        i: (r2 / local_weights[i] if local_weights[i] > 0 else 0)
-        for i, r2 in task_square_result.items()
-    }
-
-
-def dump_task_results():
-    with open(work_dir / f"output_{task_id}.json", 'w') as f:
+def dump_task_results(done):
+    with open(data_dir / f"{task_id}_task_output.json", 'w') as f:
         json.dump(
             {
-                "task_result": finalized_task_result(),
-                "task_square_result": finalized_task_square_result(),
-                "N_local_runs": N_local_runs,
-                "local_weights": local_weights,
+                "done": done,
+                "successful_runs": successful_runs,
                 "failed_runs": failed_runs,
                 "error_message": {
                     "run_id": failed_runs[-1] if failed_runs else -1,
                     "message": error_message
-                }
+                },
+                "raw_results_map": {i: task_id for i in successful_runs} if keep_runs else None,
+                "task_result": [
+                    task_result[i].to_json() if isinstance(task_result[i], Dataset) else task_result[i]
+                    for i in sorted(task_result)
+                ],
             },
             f,
             indent=2,
@@ -149,29 +145,26 @@ def dump_task_results():
         )
 
 
-task_result = defaultdict(lambda: 0)
-task_square_result = defaultdict(lambda: 0)
-N_local_runs = 0
-local_weights = defaultdict(lambda: 0)
+task_result = defaultdict(lambda: Dataset())
+successful_runs = []
 failed_runs = []
 error_message = ""
-if N_threads > 1:
-    active_threads = []
 
 for run_id in run_ids():
-    if N_threads > 1:
-        while len(active_threads) == N_threads:
-            time_mod.sleep(2)
-            active_threads = [thread for thread in active_threads if thread.is_alive()]
-
-        thread = threading.Thread(target=execute_run, args=(run_id,))
-        thread.start()
-        active_threads.append(thread)
+    run_result = execute_run(run_id)
+    if run_result is None:
+        failed_runs.append(run_id)
     else:
-        execute_run(run_id)
+        successful_runs.append(run_id)
+        if keep_runs:
+            dump_result_of_single_run(run_id, run_result)
 
-    dump_task_results()
+        for i, r in enumerate(run_result):
+            if to_be_averaged(i):
+                task_result[i].add_sample(r)
+            else:
+                task_result[i] = r
 
-if N_threads > 1:
-    for thread in active_threads:
-        thread.join()
+        dump_task_results(done=False)
+
+dump_task_results(done=True)

@@ -1,13 +1,12 @@
-from .database import add_average_to_database, read_database
-from .AsyncResult import AsyncResult
-from .average import cleaned_average
+from .DatabaseEntry import DatabaseEntry, load_database
+from .AveragedResult import load_averaged_result
 from .json_numpy import NumpyEncoder, NumpyDecoder
+from queuing_systems import slurm
 
 import os
 import json
 import dill
 import re
-from subprocess import run
 from pathlib import Path
 from shutil import rmtree
 from datetime import datetime
@@ -15,25 +14,20 @@ from functools import wraps
 
 
 package_path = Path(os.path.abspath(__file__)).parent
-config_path = Path.home() / ".config/ParallelAverage"
-do_submit_argname = "__parallel_average_do_submit__"
-dont_submit_argname = "__parallel_average_dont_submit__"
+action_argname = "__parallel_average_action__"
+
+# list of actions
+default_action = 0
+do_submit = 1
+dont_submit = 2
 
 
-class CachedAverageDoesNotExist(RuntimeError):
+class EntryDoesNotExist(RuntimeError):
     pass
 
 
-def load_cached_average(path, current_average, encoder, decoder):
-    for average in read_database(path):
-        if average == current_average:
-            return AsyncResult(path, average, encoder=encoder, decoder=decoder).collect_task_results()
-
-    raise CachedAverageDoesNotExist()
-
-
-def find_best_fitting_averages_in_database(path, average):
-    return sorted(read_database(path), key=lambda db_average: db_average.distance_to(average))[:3]
+def find_best_fitting_entries_in_database(database_path, entry):
+    return sorted(load_database(database_path), key=lambda db_entry: db_entry.distance_to(entry))[:3]
 
 
 def setup_dynamic_load_balancing(N_runs, N_tasks, input_path):
@@ -53,7 +47,6 @@ def setup_task_input_data(
     input_path,
     N_runs,
     N_tasks,
-    N_threads,
     average_results,
     save_interpreter_state,
     dynamic_load_balancing,
@@ -69,7 +62,6 @@ def setup_task_input_data(
                 "job_name": job_name,
                 "N_runs": N_runs,
                 "N_tasks": N_tasks,
-                "N_threads": N_threads,
                 "average_results": average_results,
                 "save_interpreter_state": save_interpreter_state,
                 "dynamic_load_balancing": dynamic_load_balancing,
@@ -93,53 +85,6 @@ def setup_task_input_data(
         dill.dump_session(str(input_path / "session.sess"))
 
 
-def setup_collector_input_data(input_path, average_results, encoder, decoder):
-    with (input_path / "collector_arguments.d").open('wb') as f:
-        dill.dump(
-            {
-                "average_results": average_results,
-                "encoder": encoder,
-                "decoder": decoder
-            },
-            f
-        )
-
-
-def setup_and_submit_to_slurm(N_tasks, job_name, job_path, user_options):
-    options = {
-        "array": f"1-{N_tasks}",
-        "job-name": job_name,
-        "chdir": str(job_path.resolve()),
-    }
-    options.update(user_options)
-
-    options_str = ""
-    for name, value in options.items():
-        name = name.replace('_', '-')
-        if len(name) == 1:
-            options_str += f"#SBATCH -{name} {value}\n"
-        else:
-            options_str += f"#SBATCH --{name}={value}\n"
-
-    template_file_name = "job_script_slurm.template"
-    template_file = config_path / template_file_name
-    if not template_file.exists():
-        template_file = package_path / template_file_name
-
-    with (template_file).open('r') as f:
-        job_script_slurm = f.read().format(slurm_options=options_str)
-
-    with (job_path / "job_script_slurm.sh").open('w') as f:
-        f.write(job_script_slurm)
-
-    run([
-        "sbatch",
-        f"{job_path}/job_script_slurm.sh",
-        f"{package_path}/run_task.py",
-        str(Path(".").resolve())
-    ])
-
-
 def largest_existing_job_index(parallel_average_path):
     dirs_starting_with_a_number = [
         d.name for d in parallel_average_path.iterdir() if d.is_dir() and d.name[:1].isdigit()
@@ -153,7 +98,6 @@ def largest_existing_job_index(parallel_average_path):
 def parallel_average(
     N_runs,
     N_tasks,
-    N_threads=1,
     average_results='all',
     save_interpreter_state=True,
     ignore_cache=False,  # deprecated
@@ -168,13 +112,9 @@ def parallel_average(
     def decorator(function):
         @wraps(function)
         def wrapper(*args, **kwargs):
-            do_submit = do_submit_argname in kwargs
-            dont_submit = dont_submit_argname in kwargs
-            assert not (do_submit and dont_submit), "Both using 'do_submit' and 'dont_submit' is bullshit."
-            if do_submit:
-                del kwargs[do_submit_argname]
-            if dont_submit:
-                del kwargs[dont_submit_argname]
+            action = kwargs.get(action_argname, default_action)
+            if action_argname in kwargs:
+                del kwargs[action_argname]
 
             assert N_runs >= 1, "'N_runs' has to be one or greater than one."
 
@@ -183,7 +123,7 @@ def parallel_average(
             database_path = Path(path) / "parallel_average_database.json"
             database_path.touch()
 
-            current_average = cleaned_average(
+            new_entry = DatabaseEntry(
                 {
                     "function_name": function.__name__,
                     "args": args,
@@ -194,29 +134,28 @@ def parallel_average(
                 encoder
             )
 
-            if not do_submit and not ignore_cache and database_path.stat().st_size > 0:
-                try:
-                    return load_cached_average(path, current_average, encoder, decoder)
-                except CachedAverageDoesNotExist:
-                    if dont_submit or force_caching:
-                        best_fits_str = ""
-                        for best_fit in find_best_fitting_averages_in_database(path, current_average):
-                            best_fits_str += str(best_fit) + "\n\n"
+            if not action == do_submit and not ignore_cache and database_path.stat().st_size > 0:
+                for entry in load_database(database_path):
+                    if entry == new_entry:
+                        return load_averaged_result(entry, database_path, encoder, decoder)
 
-                        raise CachedAverageDoesNotExist(
-                            f"Best fitting averages in database:\n{best_fits_str}\n"
-                            f"Invoked with:\n{current_average}"
-                        )
-            if dont_submit:
-                return
+                if action == dont_submit or force_caching:
+                    best_fits_str = ""
+                    for best_fit in find_best_fitting_entries_in_database(database_path, new_entry):
+                        best_fits_str += str(best_fit) + "\n\n"
+
+                    raise EntryDoesNotExist(
+                        f"Best fitting entries in database:\n{best_fits_str}\n"
+                        f"Invoked with:\n{new_entry}"
+                    )
+            if action == dont_submit:
+                raise EntryDoesNotExist()
 
             assert N_tasks <= N_runs, "'N_tasks' has to be less than or equal to 'N_runs'."
             assert N_tasks >= 1, "'N_tasks' has to be one or greater than one."
 
             job_index = (largest_existing_job_index(parallel_average_path) or 0) + 1
             job_name = f"{job_index}_{function.__name__}"
-            print("running job-array", job_name)
-
             job_path = parallel_average_path / job_name
             input_path = job_path / "input"
             input_path.mkdir(parents=True, exist_ok=True)
@@ -227,25 +166,23 @@ def parallel_average(
                 N_static_runs = None
 
             setup_task_input_data(
-                job_name, input_path, N_runs, N_tasks, N_threads, average_results, save_interpreter_state,
+                job_name, input_path, N_runs, N_tasks, average_results, save_interpreter_state,
                 dynamic_load_balancing, N_static_runs,
                 function, args, kwargs, encoder
             )
-            setup_collector_input_data(input_path, average_results, encoder, decoder)
 
             if queuing_system == "Slurm":
-                setup_and_submit_to_slurm(N_tasks, job_name, job_path, queuing_system_options)
+                slurm.submit(N_tasks, job_name, job_path, queuing_system_options)
             else:
                 raise ValueError(f"Unknown queuing_system: {queuing_system}. Until now, only 'Slurm' is supported.")
 
-            current_average["output"] = str((job_path / "output.json").resolve())
-            current_average["job_name"] = job_name
-            current_average["status"] = "running"
-            current_average["datetime"] = datetime.now().isoformat()
+            print("submitting job-array", job_name)
 
-            add_average_to_database(path, current_average, encoder)
-
-            return AsyncResult(path, current_average, encoder=encoder, decoder=decoder)
+            new_entry["output"] = str((job_path / "output.json").resolve())
+            new_entry["job_name"] = job_name
+            new_entry["status"] = "running"
+            new_entry["datetime"] = datetime.now().isoformat()
+            new_entry.save(database_path)
 
         return wrapper
     return decorator
@@ -254,7 +191,7 @@ def parallel_average(
 def do_submit(wrapper):
     @wraps(wrapper)
     def f(*args, **kwargs):
-        kwargs[do_submit_argname] = True
+        kwargs[action_argname] = do_submit
         return wrapper(*args, **kwargs)
 
     return f
@@ -263,7 +200,7 @@ def do_submit(wrapper):
 def dont_submit(wrapper):
     @wraps(wrapper)
     def f(*args, **kwargs):
-        kwargs[dont_submit_argname] = True
+        kwargs[action_argname] = dont_submit
         return wrapper(*args, **kwargs)
 
     return f
@@ -282,7 +219,11 @@ def cleanup(
     with open(database_path, "r+") as f:
         database_json = json.load(f)
         if remove_running_jobs:
-            database_json = [average for average in database_json if "status" not in average or average["status"] == "completed"]
+            database_json = [
+                average for average in database_json if (
+                    "status" not in average or average["status"] == "completed"
+                )
+            ]
             f.seek(0)
             json.dump(database_json, f, indent=2)
             f.truncate()
