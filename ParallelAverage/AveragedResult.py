@@ -14,6 +14,10 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
     with open(database_entry["output"]) as f:
         output = json.load(f, cls=decoder)
 
+    # for backward compatibility
+    if "successful_runs" not in output:
+        output["successful_runs"] = [0] * (output["N_total_runs"] - len(output["failed_runs"]))
+
     num_finished_runs = len(output["successful_runs"]) + len(output["failed_runs"])
 
     if output["failed_runs"]:
