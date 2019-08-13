@@ -1,7 +1,7 @@
 from .DatabaseEntry import DatabaseEntry, load_database
 from .AveragedResult import load_averaged_result
 from .json_numpy import NumpyEncoder, NumpyDecoder
-from queuing_systems import slurm
+from .queuing_systems import slurm
 
 import os
 import json
@@ -286,9 +286,3 @@ def plot_average(
             facecolor=color,
             alpha=0.25 * (alpha or 1)
         )
-
-
-class WeightedSample:
-    def __init__(self, sample, weight):
-        self.sample = sample
-        self.weight = weight

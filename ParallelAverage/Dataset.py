@@ -1,7 +1,12 @@
-from ParallelAverage import WeightedSample
 from .json_numpy import NumpyEncoder, NumpyDecoder
 import numpy as np
 import json
+
+
+class WeightedSample:
+    def __init__(self, sample, weight):
+        self.sample = sample
+        self.weight = weight
 
 
 class Dataset:

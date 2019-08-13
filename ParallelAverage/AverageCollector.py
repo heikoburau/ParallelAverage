@@ -13,9 +13,14 @@ from .Dataset import Dataset
 class AverageCollector:
     def __init__(self, job_path, average_results, encoder, decoder):
         self.job_path = Path(job_path)
-        self.data_path = self.job_path / "data_output"
         self.input_path = self.job_path / "input"
-        self.task_files = [t for t in self.data_path.iterdir() if str(t).endswith("_task_output.json")]
+        data_path = self.job_path / "data_output"
+        # try:
+        self.task_files = [t for t in data_path.iterdir() if str(t).endswith("_task_output.json")]
+        # except FileNotFoundError:
+        #     # for backward compatibility
+        #     self.task_files = [d / f"output_{int(str(d))}.json" for d in self.job_path.iterdir() if d.is_dir() and str(d).isdigit()]
+        #     self.task_files = [t for t in self.task_files if t.exists()]
 
         self.average_results = average_results
         self.encoder = encoder
