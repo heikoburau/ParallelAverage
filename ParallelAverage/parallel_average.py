@@ -3,6 +3,8 @@ from .AveragedResult import load_averaged_result
 from .json_numpy import NumpyEncoder, NumpyDecoder
 from .queuing_systems import slurm, local_machine
 
+import __main__ as _main_module
+
 import os
 import json
 import dill
@@ -90,7 +92,22 @@ def setup_task_input_data(
         )
 
     if save_interpreter_state:
-        dill.dump_session(str(input_path / "session.sess"))
+        removed_objects = {
+            name: obj for name, obj in _main_module.__dict__.items() if (
+                "AveragedResult" in str(type(obj)) or
+                (hasattr(obj, "__name__") and "AveragedResult" in obj.__name__) or
+                name in ("In", "Out", "_ih", "_oh", "_dh") or
+                (hasattr(obj, "__name__") and obj.__name__ == "matplotlib.pyplot")
+            )
+        }
+
+        for name in removed_objects:
+            del _main_module.__dict__[name]
+
+        dill.dump_session(str(input_path / "session.pkl"), main=_main_module)
+
+        for name, obj in removed_objects.items():
+            _main_module.__dict__[name] = obj
 
 
 def largest_existing_job_index(parallel_average_path):

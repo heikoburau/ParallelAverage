@@ -19,9 +19,8 @@ import dill
 import time as time_mod
 import random
 from collections import defaultdict
-from simpleflock import SimpleFlock
 from pathlib import Path
-from ParallelAverage import Dataset
+from ParallelAverage import Dataset, SimpleFlock
 
 
 task_id = int(sys.argv[1])
@@ -56,7 +55,7 @@ encoder = run_task["encoder"]
 os.environ["JOB_NAME"] = job_name
 
 if save_interpreter_state:
-    dill.load_session(str(input_dir / "session.sess"))
+    dill.load_session(str(input_dir / "session.pkl"))
 
 
 def run_ids():
@@ -123,26 +122,29 @@ def dump_result_of_single_run(run_id, result):
 
 
 def dump_task_results(done):
-    with open(data_dir / f"{task_id}_task_output.json", 'w') as f:
-        json.dump(
-            {
-                "done": done,
-                "successful_runs": successful_runs,
-                "failed_runs": failed_runs,
-                "error_message": {
-                    "run_id": failed_runs[-1] if failed_runs else -1,
-                    "message": error_message
+    task_file = data_dir / f"{task_id}_task_output.json"
+
+    with SimpleFlock(str(task_file) + ".lock"):
+        with open(task_file, 'w') as f:
+            json.dump(
+                {
+                    "done": done,
+                    "successful_runs": successful_runs,
+                    "failed_runs": failed_runs,
+                    "error_message": {
+                        "run_id": failed_runs[-1] if failed_runs else -1,
+                        "message": error_message
+                    },
+                    "raw_results_map": {i: task_id for i in successful_runs} if keep_runs else None,
+                    "task_result": [
+                        task_result[i].to_json() if isinstance(task_result[i], Dataset) else task_result[i]
+                        for i in sorted(task_result)
+                    ],
                 },
-                "raw_results_map": {i: task_id for i in successful_runs} if keep_runs else None,
-                "task_result": [
-                    task_result[i].to_json() if isinstance(task_result[i], Dataset) else task_result[i]
-                    for i in sorted(task_result)
-                ],
-            },
-            f,
-            indent=2,
-            cls=encoder
-        )
+                f,
+                indent=2,
+                cls=encoder
+            )
 
 
 task_result = defaultdict(lambda: Dataset())

@@ -58,13 +58,18 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
 class AveragedResultPrototype:
     def __new__(cls, obj, estimated_error, *args):
         if estimated_error is None:
-            print("Hallo", type(obj))
             return obj
 
         new_type_dict = dict(AveragedResultPrototype.__dict__)
         del new_type_dict["__new__"]
 
-        new_type = type("AveragedResult", (type(obj),), new_type_dict)
+        new_type_name = f"AveragedResult({type(obj).__name__})"
+        if new_type_name not in globals():
+            new_type = type(new_type_name, (type(obj),), new_type_dict)
+            globals()[new_type.__name__] = new_type
+        else:
+            new_type = globals()[new_type_name]
+
         if isinstance(obj, np.ndarray):
             result = obj.view(new_type)
         else:

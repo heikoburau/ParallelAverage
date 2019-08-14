@@ -1,4 +1,4 @@
-from multiprocessing import Process, set_start_method
+from multiprocessing import Process, set_start_method, get_start_method
 from subprocess import run
 from pathlib import Path
 import os
@@ -17,7 +17,8 @@ def run_task(python, task_id, job_path):
 
 
 def submit(N_tasks, job_name, job_path, user_options):
-    set_start_method("spawn")
+    if get_start_method() != "spawn":
+        set_start_method("spawn", force=True)
 
     for task_id in range(1, N_tasks + 1):
         Process(

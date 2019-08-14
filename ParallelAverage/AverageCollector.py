@@ -8,14 +8,15 @@ from pathlib import Path
 from collections import defaultdict
 import json
 from .Dataset import Dataset
+from .simpleflock import SimpleFlock
 
 
 class AverageCollector:
     def __init__(self, job_path, average_results, encoder, decoder):
         self.job_path = Path(job_path)
         self.input_path = self.job_path / "input"
-        data_path = self.job_path / "data_output"
-        self.task_files = [t for t in data_path.iterdir() if str(t).endswith("_task_output.json")]
+        self.data_path = self.job_path / "data_output"
+        self.task_files = [t for t in self.data_path.iterdir() if str(t).endswith("_task_output.json")]
 
         self.average_results = average_results
         self.encoder = encoder
@@ -30,7 +31,12 @@ class AverageCollector:
 
     def run(self):
         for task_file in self.task_files:
-            task_output = json.load(open(task_file, 'r'))
+            try:
+                with SimpleFlock(str(task_file) + ".lock"):
+                    with open(task_file, 'r') as f:
+                        task_output = json.load(f)
+            except FileNotFoundError:
+                continue
 
             if task_output["successful_runs"]:
                 self.successful_runs += task_output["successful_runs"]
