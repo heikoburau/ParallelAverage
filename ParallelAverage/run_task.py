@@ -9,7 +9,6 @@ Command-line arguments
 
 1: task id
 2: working directory of job
-
 """
 
 
@@ -22,12 +21,13 @@ import random
 from collections import defaultdict
 from simpleflock import SimpleFlock
 from pathlib import Path
-from .Dataset import Dataset
+from ParallelAverage import Dataset
 
 
 task_id = int(sys.argv[1])
 job_dir = Path(sys.argv[2])
 data_dir = job_dir / "data_output"
+data_dir.mkdir(exist_ok=True)
 input_dir = job_dir / "input"
 
 

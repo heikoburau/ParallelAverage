@@ -1,16 +1,12 @@
 #!/bin/bash
 {slurm_options}
 
-WORK_DIR=`pwd`/$SLURM_ARRAY_TASK_ID
-mkdir -p $WORK_DIR
-
-# edit only here:
-
 module purge
 module load intelpython3
 
 ######################
 
+WORK_DIR=`pwd`
 RUN_TASK_PY=$1
 CALLER_DIR=$2
 cd $CALLER_DIR

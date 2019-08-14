@@ -1,7 +1,7 @@
 from .DatabaseEntry import DatabaseEntry, load_database
 from .AveragedResult import load_averaged_result
 from .json_numpy import NumpyEncoder, NumpyDecoder
-from .queuing_systems import slurm
+from .queuing_systems import slurm, local_machine
 
 import os
 import json
@@ -20,6 +20,12 @@ action_argname = "__parallel_average_action__"
 default_action = 0
 do_submit = 1
 dont_submit = 2
+
+
+queuing_system_modules = {
+    "Slurm": slurm,
+    None: local_machine
+}
 
 
 class EntryDoesNotExist(RuntimeError):
@@ -51,6 +57,7 @@ def setup_task_input_data(
     save_interpreter_state,
     dynamic_load_balancing,
     N_static_runs,
+    keep_runs,
     function,
     args,
     kwargs,
@@ -65,7 +72,8 @@ def setup_task_input_data(
                 "average_results": average_results,
                 "save_interpreter_state": save_interpreter_state,
                 "dynamic_load_balancing": dynamic_load_balancing,
-                "N_static_runs": N_static_runs
+                "N_static_runs": N_static_runs,
+                "keep_runs": keep_runs
             },
             f
         )
@@ -100,6 +108,7 @@ def parallel_average(
     N_tasks,
     average_results='all',
     save_interpreter_state=True,
+    keep_runs=False,
     ignore_cache=False,  # deprecated
     force_caching=False,  # deprecated
     dynamic_load_balancing=False,
@@ -167,16 +176,24 @@ def parallel_average(
 
             setup_task_input_data(
                 job_name, input_path, N_runs, N_tasks, average_results, save_interpreter_state,
-                dynamic_load_balancing, N_static_runs,
+                dynamic_load_balancing, N_static_runs, keep_runs,
                 function, args, kwargs, encoder
             )
 
-            if queuing_system == "Slurm":
-                slurm.submit(N_tasks, job_name, job_path, queuing_system_options)
+            if queuing_system in queuing_system_modules:
+                queuing_system_modules[queuing_system].submit(
+                    N_tasks, job_name, job_path, queuing_system_options
+                )
             else:
-                raise ValueError(f"Unknown queuing_system: {queuing_system}. Until now, only 'Slurm' is supported.")
+                raise ValueError(
+                    f"Unknown queuing system: {queuing_system}\n"
+                    f"Supported options are: {list(queuing_system_modules)}"
+                )
 
-            print("submitting job-array", job_name)
+            if queuing_system is not None:
+                print("submitting job-array", job_name)
+            else:
+                print(f"starting {N_tasks} local processes", job_name)
 
             new_entry["output"] = str((job_path / "output.json").resolve())
             new_entry["job_name"] = job_name
@@ -269,7 +286,7 @@ def plot_average(
     if points:
         plt.errorbar(
             x,
-            average,
+            +average,
             yerr=estimated_error,
             marker="o",
             linestyle="None",
@@ -281,8 +298,8 @@ def plot_average(
         plt.plot(x, average, label=label, color=color, linestyle=linestyle, alpha=alpha)
         plt.fill_between(
             x,
-            average - estimated_error,
-            average + estimated_error,
+            +average - estimated_error,
+            +average + estimated_error,
             facecolor=color,
             alpha=0.25 * (alpha or 1)
         )

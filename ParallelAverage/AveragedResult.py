@@ -10,20 +10,16 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
     if database_entry["status"] == "running":
         job_path = Path(database_entry["output"]).parent
 
-        old_style = False
-        if Path(database_entry["output"]).exists():
-            with open(database_entry["output"]) as f:
-                old_style = "N_total_runs" in json.load(f)
-
-        if old_style:
+        try:
+            AverageCollector(job_path, database_entry["average_results"], encoder, decoder).run()
+        except FileNotFoundError:
+            # for backward compatibility
             import os
             from subprocess import run
 
             package_path = Path(os.path.abspath(__file__)).parent
             average_collector_file = package_path / "legacy" / "average_collector.sh"
             run([str(average_collector_file), str(job_path.resolve()), str(package_path)])
-        else:
-            AverageCollector(job_path, database_entry["average_results"], encoder, decoder).run()
 
     with open(database_entry["output"]) as f:
         output = json.load(f, cls=decoder)
@@ -49,7 +45,7 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
             database_entry["status"] = "completed"
             database_entry.save(database_path)
 
-    return AveragedResult(
+    return AveragedResultPrototype(
         output["result"],
         output["estimated_error"],
         output["estimated_variance"],
@@ -59,12 +55,13 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
     )
 
 
-class AveragedResult:
+class AveragedResultPrototype:
     def __new__(cls, obj, estimated_error, *args):
         if estimated_error is None:
+            print("Hallo", type(obj))
             return obj
 
-        new_type_dict = dict(AveragedResult.__dict__)
+        new_type_dict = dict(AveragedResultPrototype.__dict__)
         del new_type_dict["__new__"]
 
         new_type = type("AveragedResult", (type(obj),), new_type_dict)
@@ -108,8 +105,20 @@ class AveragedResult:
         return super(self.__class__, self).__repr__() + " +/- " + repr(self.estimated_error)
 
     def __getitem__(self, idx):
-        return AveragedResult(
-            super(self.__class__, self).__getitem__(idx),
+        self_class = self.__class__
+        while str(self_class.__base__) == "AveragedResult":
+            self_class = self_class.__base__
+
+        if isinstance(self, np.ndarray):
+            result = self.view(self_class.__base__).__getitem__(idx)
+        else:
+            result = super(self_class, self).__getitem__(idx)
+
+        if not hasattr(self, "estimated_error"):
+            return result
+
+        return AveragedResultPrototype(
+            result,
             self.estimated_error[idx],
             self.estimated_variance[idx],
             self.successful_runs,
@@ -124,7 +133,7 @@ class AveragedResult:
         return self
 
     def __mul__(self, x):
-        result = AveragedResult(deepcopy(super(self.__class__, self)), *self.__fields)
+        result = AveragedResultPrototype(deepcopy(super(self.__class__, self)), *self.__fields)
         result *= x
         return result
 
@@ -138,7 +147,7 @@ class AveragedResult:
         return self
 
     def __truediv__(self, x):
-        result = AveragedResult(deepcopy(super(self.__class__, self)), *self.__fields)
+        result = AveragedResultPrototype(deepcopy(super(self.__class__, self)), *self.__fields)
         result /= x
         return result
 
@@ -147,7 +156,7 @@ class AveragedResult:
         return self
 
     def __add__(self, x):
-        return AveragedResult(super(self.__class__, self) + x, *self.__fields)
+        return AveragedResultPrototype(super(self.__class__, self) + x, *self.__fields)
 
     def __radd__(self, x):
         return self + x
@@ -157,16 +166,48 @@ class AveragedResult:
         return self
 
     def __sub__(self, x):
-        return AveragedResult(super(self.__class__, self) - x, *self.__fields)
+        return AveragedResultPrototype(super(self.__class__, self) - x, *self.__fields)
 
     def __rsub__(self, x):
-        return AveragedResult(x - super(self.__class__, self), *self.__fields)
+        return AveragedResultPrototype(x - super(self.__class__, self), *self.__fields)
 
     def __neg__(self):
-        return AveragedResult(-super(self.__class__, self), *self.__fields)
+        return AveragedResultPrototype(-super(self.__class__, self), *self.__fields)
 
-    # def __getstate__(self):
-    #     return False
+    def __pos__(self):
+        if isinstance(self, np.ndarray):
+            return +self.view(np.ndarray)
 
-    # def __setstate__(self, state):
-    #     pass
+        return super(self.__class__, self).__pos__(self)
+
+    @property
+    def real(self):
+        if isinstance(self, np.ndarray):
+            return AveragedResultPrototype(
+                super(self.__class__, self).real.view(np.ndarray),
+                *self.__fields
+            )
+
+        return AveragedResultPrototype(
+            super(self.__class__, self).real,
+            *self.__fields
+        )
+
+    @property
+    def imag(self):
+        if isinstance(self, np.ndarray):
+            return AveragedResultPrototype(
+                super(self.__class__, self).imag.view(np.ndarray),
+                *self.__fields
+            )
+
+        return AveragedResultPrototype(
+            super(self.__class__, self).imag,
+            *self.__fields
+        )
+
+    def __getstate__(self):
+        return False
+
+    def __setstate__(self, state):
+        pass

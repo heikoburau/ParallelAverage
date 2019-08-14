@@ -24,7 +24,7 @@ class Dataset:
             weight = 1
 
         self.data += weight * sample if weight > 0 else 0
-        self.data_suared += weight * abs(sample)**2 if weight > 0 else 0
+        self.data_squared += weight * abs(sample)**2 if weight > 0 else 0
         self.total_weight += weight
         self.num_samples += 1
 
@@ -33,8 +33,8 @@ class Dataset:
             return self
         assert isinstance(other, Dataset)
 
-        self.data += other.total_weight * other.data
-        self.data_squared += other.total_weight * other.data_squared
+        self.data += other.data
+        self.data_squared += other.data_squared
         self.total_weight += other.total_weight
         self.num_samples += other.num_samples
 
@@ -77,7 +77,7 @@ class Dataset:
         )
 
     @staticmethod
-    def from_json(self, obj):
+    def from_json(obj):
         result = Dataset()
         result.data = decode_array(obj["data"])
         result.data_squared = decode_array(obj["data_squared"])
@@ -91,4 +91,4 @@ def decode_array(json_obj):
 
 
 def encode_array(arr):
-    return json.dumps(arr, cls=NumpyEncoder)
+    return json.loads(json.dumps(arr, cls=NumpyEncoder))
