@@ -13,6 +13,7 @@ from pathlib import Path
 from shutil import rmtree
 from datetime import datetime
 from functools import wraps
+from collections import namedtuple
 import pickle
 
 
@@ -20,9 +21,10 @@ package_path = Path(os.path.abspath(__file__)).parent
 action_argname = "__parallel_average_action__"
 
 # list of actions
-default_action = 0
-do_submit = 1
-dont_submit = 2
+actions = namedtuple(
+    "Actions",
+    "default do_submit dont_submit print_job_output cancel_job"
+)._make(range(5))
 
 
 queuing_system_modules = {
@@ -142,7 +144,7 @@ def parallel_average(
     def decorator(function):
         @wraps(function)
         def wrapper(*args, **kwargs):
-            action = kwargs.get(action_argname, default_action)
+            action = kwargs.get(action_argname, actions.default)
             if action_argname in kwargs:
                 del kwargs[action_argname]
 
@@ -152,6 +154,14 @@ def parallel_average(
             parallel_average_path.mkdir(exist_ok=True)
             database_path = Path(path) / "parallel_average_database.json"
             database_path.touch()
+
+            if queuing_system in queuing_system_modules:
+                queuing_system_module = queuing_system_modules[queuing_system]
+            else:
+                raise ValueError(
+                    f"Unknown queuing system: {queuing_system}\n"
+                    f"Supported options are: {list(queuing_system_modules)}"
+                )
 
             new_entry = DatabaseEntry(
                 {
@@ -164,12 +174,19 @@ def parallel_average(
                 encoder
             )
 
-            if not action == do_submit and not ignore_cache and database_path.stat().st_size > 0:
+            if not action == actions.do_submit and not ignore_cache and database_path.stat().st_size > 0:
                 for entry in load_database(database_path):
                     if entry == new_entry:
-                        return load_averaged_result(entry, database_path, encoder, decoder)
+                        if action == actions.print_job_output:
+                            return queuing_system_module.print_job_output(
+                                parallel_average_path / entry["job_name"]
+                            )
+                        elif action == actions.cancel_job:
+                            return queuing_system_module.cancel_job(entry["job_name"])
+                        else:
+                            return load_averaged_result(entry, database_path, encoder, decoder)
 
-                if action == dont_submit or force_caching:
+                if action != actions.default or force_caching:
                     best_fits_str = ""
                     for best_fit in find_best_fitting_entries_in_database(database_path, new_entry):
                         best_fits_str += str(best_fit) + "\n\n"
@@ -178,7 +195,7 @@ def parallel_average(
                         f"Best fitting entries in database:\n{best_fits_str}\n"
                         f"Invoked with:\n{new_entry}"
                     )
-            if action == dont_submit:
+            if action not in (actions.default, actions.do_submit):
                 raise EntryDoesNotExist()
 
             assert N_tasks <= N_runs, "'N_tasks' has to be less than or equal to 'N_runs'."
@@ -201,20 +218,9 @@ def parallel_average(
                 function, args, kwargs, encoder
             )
 
-            if queuing_system in queuing_system_modules:
-                queuing_system_modules[queuing_system].submit(
-                    N_tasks, job_name, job_path, queuing_system_options
-                )
-            else:
-                raise ValueError(
-                    f"Unknown queuing system: {queuing_system}\n"
-                    f"Supported options are: {list(queuing_system_modules)}"
-                )
-
-            if queuing_system is not None:
-                print("submitting job-array", job_name)
-            else:
-                print(f"starting {N_tasks} local processes", job_name)
+            queuing_system_module.submit(
+                N_tasks, job_name, job_path, queuing_system_options
+            )
 
             new_entry["output"] = str((job_path / "output.json").resolve())
             new_entry["job_name"] = job_name
@@ -229,7 +235,7 @@ def parallel_average(
 def do_submit(wrapper):
     @wraps(wrapper)
     def f(*args, **kwargs):
-        kwargs[action_argname] = do_submit
+        kwargs[action_argname] = actions.do_submit
         return wrapper(*args, **kwargs)
 
     return f
@@ -238,7 +244,25 @@ def do_submit(wrapper):
 def dont_submit(wrapper):
     @wraps(wrapper)
     def f(*args, **kwargs):
-        kwargs[action_argname] = dont_submit
+        kwargs[action_argname] = actions.dont_submit
+        return wrapper(*args, **kwargs)
+
+    return f
+
+
+def print_job_output(wrapper):
+    @wraps(wrapper)
+    def f(*args, **kwargs):
+        kwargs[action_argname] = actions.print_job_output
+        return wrapper(*args, **kwargs)
+
+    return f
+
+
+def cancel_job(wrapper):
+    @wraps(wrapper)
+    def f(*args, **kwargs):
+        kwargs[action_argname] = actions.cancel_job
         return wrapper(*args, **kwargs)
 
     return f

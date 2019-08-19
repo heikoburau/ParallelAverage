@@ -40,3 +40,24 @@ def submit(N_tasks, job_name, job_path, user_options):
         f"{package_path}/run_task.py",
         str(Path(".").resolve())
     ])
+
+    print("submitting job-array", job_name)
+
+
+def print_job_output(job_path):
+    output_files = [f for f in job_path.iterdir() if str(f).endswith(".out")]
+    largest_output_file = max(output_files, key=lambda f: f.stat().st_size)
+    with largest_output_file.open() as f:
+        print(
+            f"content of largest job output file ({largest_output_file.name}):\n"
+            f"{f.read()}"
+        )
+
+
+def cancel_job(job_name):
+    run([
+        "scancel",
+        f"--jobname={job_name}"
+    ])
+
+    print("cancelling job-array", job_name)
