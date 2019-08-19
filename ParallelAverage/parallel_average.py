@@ -13,6 +13,7 @@ from pathlib import Path
 from shutil import rmtree
 from datetime import datetime
 from functools import wraps
+import pickle
 
 
 package_path = Path(os.path.abspath(__file__)).parent
@@ -92,15 +93,18 @@ def setup_task_input_data(
         )
 
     if save_interpreter_state:
-        removed_objects = {
-            name: obj for name, obj in _main_module.__dict__.items() if (
-                "AveragedResult" in str(type(obj)) or
-                (hasattr(obj, "__name__") and "AveragedResult" in obj.__name__) or
-                (hasattr(obj, "__name__") and obj.__name__ == "matplotlib.pyplot") or
-                name in ("In", "Out") or
-                (name != "__name__" and name.startswith("_"))
-            )
-        }
+        removed_objects = {}
+        for name, obj in _main_module.__dict__.items():
+            if name in ("In", "Out") or (
+                name != "__name__" and name.startswith("_")
+            ):
+                removed_objects[name] = obj
+                continue
+
+            try:
+                dill.dumps(obj)
+            except (pickle.PicklingError, TypeError):
+                removed_objects[name] = obj
 
         for name in removed_objects:
             del _main_module.__dict__[name]
@@ -117,7 +121,6 @@ def largest_existing_job_index(parallel_average_path):
     ]
     if not dirs_starting_with_a_number:
         return None
-
     return max(int(re.search(r"\d+", dir_str).group()) for dir_str in dirs_starting_with_a_number)
 
 
