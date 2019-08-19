@@ -16,6 +16,7 @@ class AverageCollector:
         self.job_path = Path(job_path)
         self.input_path = self.job_path / "input"
         self.data_path = self.job_path / "data_output"
+        self.data_path.mkdir(exist_ok=True)
         self.task_files = [t for t in self.data_path.iterdir() if str(t).endswith("_task_output.json")]
 
         self.average_results = average_results
@@ -31,12 +32,9 @@ class AverageCollector:
 
     def run(self):
         for task_file in self.task_files:
-            try:
-                with SimpleFlock(str(task_file) + ".lock"):
-                    with open(task_file, 'r') as f:
-                        task_output = json.load(f)
-            except FileNotFoundError:
-                continue
+            with SimpleFlock(str(task_file) + ".lock"):
+                with open(task_file, 'r') as f:
+                    task_output = json.load(f)
 
             if task_output["successful_runs"]:
                 self.successful_runs += task_output["successful_runs"]

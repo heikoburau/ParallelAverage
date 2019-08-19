@@ -37,13 +37,12 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
             f"{output['error_message']}"
         )
 
-    if output["successful_runs"]:
-        num_still_running = database_entry["N_runs"] - num_finished_runs
-        if num_still_running > 0:
-            warn(f"{num_still_running} / {database_entry['N_runs']} runs are still running!")
-        elif database_entry["status"] == "running":
-            database_entry["status"] = "completed"
-            database_entry.save(database_path)
+    num_still_running = database_entry["N_runs"] - num_finished_runs
+    if num_still_running > 0:
+        warn(f"{num_still_running} / {database_entry['N_runs']} runs are still running!")
+    elif database_entry["status"] == "running":
+        database_entry["status"] = "completed"
+        database_entry.save(database_path)
 
     return AveragedResultPrototype(
         output["result"],

@@ -96,8 +96,9 @@ def setup_task_input_data(
             name: obj for name, obj in _main_module.__dict__.items() if (
                 "AveragedResult" in str(type(obj)) or
                 (hasattr(obj, "__name__") and "AveragedResult" in obj.__name__) or
-                name in ("In", "Out", "_ih", "_oh", "_dh") or
-                (hasattr(obj, "__name__") and obj.__name__ == "matplotlib.pyplot")
+                (hasattr(obj, "__name__") and obj.__name__ == "matplotlib.pyplot") or
+                name in ("In", "Out") or
+                (name != "__name__" and name.startswith("_"))
             )
         }
 
