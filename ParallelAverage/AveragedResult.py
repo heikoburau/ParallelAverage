@@ -39,12 +39,12 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
 
     num_still_running = database_entry["N_runs"] - num_finished_runs
     if num_still_running > 0:
-        warn(f"{num_still_running} / {database_entry['N_runs']} runs are still running!")
+        warn(f"{num_still_running} / {database_entry['N_runs']} runs are not ready yet!")
     elif database_entry["status"] == "running":
         database_entry["status"] = "completed"
         database_entry.save(database_path)
 
-    return AveragedResultPrototype(
+    return AveragedResult(
         output["result"],
         output["estimated_error"],
         output["estimated_variance"],
@@ -54,164 +54,105 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
     )
 
 
-class AveragedResultPrototype:
-    def __new__(cls, obj, estimated_error, *args):
-        if estimated_error is None:
-            return obj
-
-        new_type_dict = dict(AveragedResultPrototype.__dict__)
-        del new_type_dict["__new__"]
-
-        new_type_name = f"AveragedResult({type(obj).__name__})"
-        if new_type_name not in globals():
-            new_type = type(new_type_name, (type(obj),), new_type_dict)
-            globals()[new_type.__name__] = new_type
-        else:
-            new_type = globals()[new_type_name]
-
-        if isinstance(obj, np.ndarray):
-            result = obj.view(new_type)
-        else:
-            result = new_type.__new__(new_type, obj)
-
-        result.__init__(obj, estimated_error, *args)
-        return result
-
+class AveragedResult:
     def __init__(
         self,
-        obj,
+        data,
         estimated_error,
         estimated_variance,
         successful_runs,
         failed_runs,
-        job_name,
+        job_name
     ):
+        self.data = data
         self.estimated_error = deepcopy(estimated_error)
         self.estimated_variance = deepcopy(estimated_variance)
         self.successful_runs = successful_runs
         self.failed_runs = failed_runs
         self.job_name = job_name
 
-    @property
-    def __fields(self):
-        return (
-            self.estimated_error,
-            self.estimated_variance,
-            self.successful_runs,
-            self.failed_runs,
-            self.job_name
-        )
-
     def __str__(self):
-        return super(self.__class__, self).__str__() + " +/- " + str(self.estimated_error)
+        return str(self.data) + " +/- " + str(self.estimated_error)
 
     def __repr__(self):
-        return super(self.__class__, self).__repr__() + " +/- " + repr(self.estimated_error)
-
-    def __getitem__(self, idx):
-        self_class = self.__class__
-        while str(self_class.__base__) == "AveragedResult":
-            self_class = self_class.__base__
-
-        if isinstance(self, np.ndarray):
-            result = self.view(self_class.__base__).__getitem__(idx)
-        else:
-            result = super(self_class, self).__getitem__(idx)
-
-        if not hasattr(self, "estimated_error"):
-            return result
-
-        return AveragedResultPrototype(
-            result,
-            self.estimated_error[idx],
-            self.estimated_variance[idx],
-            self.successful_runs,
-            self.failed_runs,
-            self.job_name
-        )
-
-    def __imul__(self, x):
-        super(self.__class__, self).__imul__(x)
-        self.estimated_error *= abs(x)
-        self.estimated_variance *= abs(x)**2
-        return self
-
-    def __mul__(self, x):
-        result = AveragedResultPrototype(deepcopy(super(self.__class__, self)), *self.__fields)
-        result *= x
-        return result
-
-    def __rmul__(self, x):
-        return self * x
-
-    def __itruediv__(self, x):
-        super(self.__class__, self).__itruediv__(x)
-        self.estimated_error /= abs(x)
-        self.estimated_variance /= abs(x)**2
-        return self
-
-    def __truediv__(self, x):
-        result = AveragedResultPrototype(deepcopy(super(self.__class__, self)), *self.__fields)
-        result /= x
-        return result
-
-    def __iadd__(self, x):
-        super(self.__class__, self).__iadd__(self, x)
-        return self
-
-    def __add__(self, x):
-        return AveragedResultPrototype(super(self.__class__, self) + x, *self.__fields)
-
-    def __radd__(self, x):
-        return self + x
-
-    def __isub__(self, x):
-        super(self.__class__, self).__isub__(self, x)
-        return self
-
-    def __sub__(self, x):
-        return AveragedResultPrototype(super(self.__class__, self) - x, *self.__fields)
-
-    def __rsub__(self, x):
-        return AveragedResultPrototype(x - super(self.__class__, self), *self.__fields)
-
-    def __neg__(self):
-        return AveragedResultPrototype(-super(self.__class__, self), *self.__fields)
-
-    def __pos__(self):
-        if isinstance(self, np.ndarray):
-            return +self.view(np.ndarray)
-
-        return super(self.__class__, self).__pos__(self)
-
-    @property
-    def real(self):
-        if isinstance(self, np.ndarray):
-            return AveragedResultPrototype(
-                super(self.__class__, self).real.view(np.ndarray),
-                *self.__fields
-            )
-
-        return AveragedResultPrototype(
-            super(self.__class__, self).real,
-            *self.__fields
-        )
-
-    @property
-    def imag(self):
-        if isinstance(self, np.ndarray):
-            return AveragedResultPrototype(
-                super(self.__class__, self).imag.view(np.ndarray),
-                *self.__fields
-            )
-
-        return AveragedResultPrototype(
-            super(self.__class__, self).imag,
-            *self.__fields
-        )
+        return repr(self.data) + " +/- " + repr(self.estimated_error)
 
     def __getstate__(self):
         return False
 
     def __setstate__(self, state):
         pass
+
+    def __getattr__(self, name):
+        return getattr(self.data, name)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __getitem__(self, name):
+        return AveragedResult(
+            self.data[name],
+            self.estimated_error[name],
+            self.estimated_variance[name],
+            self.successful_runs,
+            self.failed_runs,
+            self.job_name
+        )
+
+    def __setitem__(self, name, value):
+        self.data[name] = value
+        return self
+
+
+numeric_magic_functions = [
+    "__add__",
+    "__sub__",
+    "__mul__",
+    "__matmul__",
+    "__truediv__",
+    "__floordiv__",
+    "__mod__",
+    "__divmod__",
+    "__pow__",
+    "__lshift__",
+    "__rshift__",
+    "__and__",
+    "__xor__",
+    "__or__",
+    "__radd__",
+    "__rsub__",
+    "__rmul__",
+    "__rmatmul__",
+    "__rtruediv__",
+    "__rfloordiv__",
+    "__rmod__",
+    "__rdivmod__",
+    "__rpow__",
+    "__rlshift__",
+    "__rrshift__",
+    "__rand__",
+    "__rxor__",
+    "__ror__",
+    "__iadd__",
+    "__isub__",
+    "__imul__",
+    "__imatmul__",
+    "__itruediv__",
+    "__ifloordiv__",
+    "__ipow__",
+    "__irshift__",
+    "__ixor__",
+    "__ior__",
+    "__neg__",
+    "__pos__",
+    "__abs__",
+    "__invert__",
+    "__round__"
+]
+
+for function in numeric_magic_functions:
+    wrapper = lambda function: lambda *args: getattr(args[0].data, function)(*args[1:])
+    setattr(AveragedResult, function, wrapper(function))

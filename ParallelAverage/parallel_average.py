@@ -318,6 +318,7 @@ def plot_average(
     estimated_error=None
 ):
     import matplotlib.pyplot as plt
+    import numpy as np
 
     if type(color) is int:
         color = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink"][color]
@@ -326,12 +327,13 @@ def plot_average(
         color = ScalarMappable(cmap=cmap).to_rgba(color, norm=False)
 
     if estimated_error is None:
-        estimated_error = average.estimated_error
+        estimated_error = average.estimated_error if hasattr(average, "estimated_error") else np.zeros_like(x)
+
 
     if points:
         plt.errorbar(
             x,
-            +average,
+            average.data if hasattr(average, "data") else average,
             yerr=estimated_error,
             marker="o",
             linestyle="None",
