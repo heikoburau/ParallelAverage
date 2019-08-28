@@ -229,6 +229,9 @@ def parallel_average(
             new_entry["datetime"] = datetime.now().isoformat()
             new_entry.save(database_path)
 
+            if action == actions.do_submit:
+                cleanup(path=path)
+
         return wrapper
     return decorator
 
