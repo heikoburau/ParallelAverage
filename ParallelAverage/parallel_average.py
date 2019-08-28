@@ -183,6 +183,7 @@ def parallel_average(
                             )
                         elif action == actions.cancel_job:
                             return queuing_system_module.cancel_job(entry["job_name"])
+                            # TODO: remove entry from database
                         else:
                             return load_averaged_result(entry, database_path, encoder, decoder)
 

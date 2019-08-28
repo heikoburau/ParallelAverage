@@ -1,4 +1,5 @@
 from .AverageCollector import AverageCollector
+from .json_numpy import NumpyDecoder
 from copy import deepcopy
 import numpy as np
 from pathlib import Path
@@ -7,9 +8,8 @@ import json
 
 
 def load_averaged_result(database_entry, database_path, encoder, decoder):
+    job_path = Path(database_entry["output"]).parent
     if database_entry["status"] == "running":
-        job_path = Path(database_entry["output"]).parent
-
         try:
             AverageCollector(job_path, database_entry["average_results"], encoder, decoder).run()
         except FileNotFoundError:
@@ -50,6 +50,11 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
         output["estimated_variance"],
         output["successful_runs"],
         output["failed_runs"],
+        Runs(
+            output["successful_runs"],
+            job_path,
+            convert_dict_keys_to_int(output["raw_results_map"])
+        ),
         database_entry["job_name"]
     )
 
@@ -60,16 +65,27 @@ class AveragedResult:
         data,
         estimated_error,
         estimated_variance,
-        successful_runs,
-        failed_runs,
-        job_name
+        successful_run_ids,
+        failed_run_ids,
+        runs,
+        job_name,
     ):
         self.data = data
         self.estimated_error = deepcopy(estimated_error)
         self.estimated_variance = deepcopy(estimated_variance)
-        self.successful_runs = successful_runs
-        self.failed_runs = failed_runs
+        self.successful_run_ids = successful_run_ids
+        self.failed_run_ids = failed_run_ids
+        self.runs = runs
         self.job_name = job_name
+
+    @property
+    def _meta_info_fields(self):
+        return (
+            self.successful_run_ids,
+            self.failed_run_ids,
+            self.runs,
+            self.job_name
+        )
 
     def __str__(self):
         return str(self.data) + " +/- " + str(self.estimated_error)
@@ -97,9 +113,7 @@ class AveragedResult:
             self.data[name],
             self.estimated_error[name],
             self.estimated_variance[name],
-            self.successful_runs,
-            self.failed_runs,
-            self.job_name
+            *self._meta_info_fields
         )
 
     def __setitem__(self, name, value):
@@ -156,3 +170,36 @@ numeric_magic_functions = [
 for function in numeric_magic_functions:
     wrapper = lambda function: lambda *args: getattr(args[0].data, function)(*args[1:])
     setattr(AveragedResult, function, wrapper(function))
+
+
+class Runs:
+    def __init__(self, run_ids, job_path, raw_results_map):
+        self.run_ids = run_ids
+        self.job_path = job_path
+        self.raw_results_map = raw_results_map
+
+    def __iter__(self):
+        return iter(self.run_ids)
+
+    def __getitem__(self, run_id):
+        file_id = self.raw_results_map[run_id]
+        with open(self.job_path / "data_output" / f"{file_id}_raw_results.json") as f:
+            return json.load(f, cls=NumpyDecoder)[str(run_id)]
+
+    def __len__(self):
+        return len(self.run_ids)
+
+    def keys(self):
+        return self.run_ids
+
+    def values(self):
+        for run_id in self:
+            yield self[run_id]
+
+    def items(self):
+        for run_id in self:
+            yield run_id, self[run_id]
+
+
+def convert_dict_keys_to_int(dictionary):
+    return {int(key): value for key, value in dictionary.items()}

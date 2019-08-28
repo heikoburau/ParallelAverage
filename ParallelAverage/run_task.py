@@ -106,15 +106,22 @@ def execute_run(run_id):
     return result
 
 
+def polish(x):
+    if isinstance(x, (list, tuple)) and len(x) == 1:
+        x = x[0]
+    return x
+
+
 def dump_result_of_single_run(run_id, result):
     runs_of_task = data_dir / f"{task_id}_raw_results.json"
+    runs_of_task.touch()
     with open(runs_of_task, 'r+') as f:
         if runs_of_task.stat().st_size == 0:
-            runs = []
+            runs = {}
         else:
             runs = json.load(f)
 
-        runs[run_id] = result
+        runs[run_id] = polish(result)
 
         f.seek(0)
         json.dump(runs, f, indent=2, cls=encoder)
