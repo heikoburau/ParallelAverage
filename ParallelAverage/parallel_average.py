@@ -42,6 +42,7 @@ def find_best_fitting_entries_in_database(database_path, entry):
 
 
 def setup_dynamic_load_balancing(N_runs, N_tasks, input_path):
+    N_runs = volume(N_runs)
     N_static_runs = N_runs // 4
     N_dynamic_runs = N_runs - N_static_runs
     chunk_size = max(1, N_dynamic_runs // 3 // N_tasks)
@@ -148,7 +149,7 @@ def parallel_average(
             if action_argname in kwargs:
                 del kwargs[action_argname]
 
-            assert N_runs >= 1, "'N_runs' has to be one or greater than one."
+            assert volume(N_runs) >= 1, "'N_runs' has to be one or greater than one."
 
             parallel_average_path = Path(path) / ".parallel_average"
             parallel_average_path.mkdir(exist_ok=True)
@@ -182,8 +183,10 @@ def parallel_average(
                                 parallel_average_path / entry["job_name"]
                             )
                         elif action == actions.cancel_job:
-                            return queuing_system_module.cancel_job(entry["job_name"])
-                            # TODO: remove entry from database
+                            queuing_system_module.cancel_job(entry["job_name"])
+                            entry.remove(database_path)
+                            cleanup(path=path)
+                            return
                         else:
                             return load_averaged_result(entry, database_path, encoder, decoder)
 
@@ -199,7 +202,7 @@ def parallel_average(
             if action not in (actions.default, actions.do_submit):
                 raise EntryDoesNotExist()
 
-            assert N_tasks <= N_runs, "'N_tasks' has to be less than or equal to 'N_runs'."
+            assert N_tasks <= volume(N_runs), "'N_tasks' has to be less than or equal to 'N_runs'."
             assert N_tasks >= 1, "'N_tasks' has to be one or greater than one."
 
             job_index = (largest_existing_job_index(parallel_average_path) or 0) + 1
@@ -333,7 +336,6 @@ def plot_average(
     if estimated_error is None:
         estimated_error = average.estimated_error if hasattr(average, "estimated_error") else np.zeros_like(x)
 
-
     if points:
         plt.errorbar(
             x,
@@ -354,3 +356,13 @@ def plot_average(
             facecolor=color,
             alpha=0.25 * (alpha or 1)
         )
+
+
+def volume(x):
+    if isinstance(x, int):
+        return x
+
+    result = 1
+    for x_i in x:
+        result *= x_i
+    return result

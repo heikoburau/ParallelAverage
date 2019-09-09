@@ -8,7 +8,10 @@ class DatabaseEntry(dict):
         super().__init__(deepcopy(input_dict))
         self.encoder = encoder
 
-        # convert 'args' and 'kwargs' into a genuine json object
+        # convert fields to a genuine json objects
+        self["N_runs"] = json.loads(
+            json.dumps(self["N_runs"])
+        )
         self["args"] = json.loads(
             json.dumps(self["args"], cls=encoder),
         )
@@ -53,6 +56,20 @@ class DatabaseEntry(dict):
                 entries = [DatabaseEntry(entry) for entry in entries]
                 entries = [e for e in entries if e != self]
                 entries.append(self)
+                f.seek(0)
+                json.dump(entries, f, indent=2, cls=self.encoder)
+                f.truncate()
+
+    def remove(self, database_path):
+        with SimpleFlock(str(database_path.parent / "dblock")):
+            with open(database_path, 'r+') as f:
+                if database_path.stat().st_size == 0:
+                    entries = []
+                else:
+                    entries = json.load(f)
+
+                entries = [DatabaseEntry(entry) for entry in entries]
+                entries = [e for e in entries if e != self]
                 f.seek(0)
                 json.dump(entries, f, indent=2, cls=self.encoder)
                 f.truncate()

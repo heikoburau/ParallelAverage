@@ -1,7 +1,6 @@
 from .AverageCollector import AverageCollector
 from .json_numpy import NumpyDecoder
 from copy import deepcopy
-import numpy as np
 from pathlib import Path
 from warnings import warn
 import json
@@ -37,9 +36,9 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
             f"{output['error_message']}"
         )
 
-    num_still_running = database_entry["N_runs"] - num_finished_runs
+    num_still_running = volume(database_entry["N_runs"]) - num_finished_runs
     if num_still_running > 0:
-        warn(f"{num_still_running} / {database_entry['N_runs']} runs are not ready yet!")
+        warn(f"{num_still_running} / {volume(database_entry['N_runs'])} runs are not ready yet!")
     elif database_entry["status"] == "running":
         database_entry["status"] = "completed"
         database_entry.save(database_path)
@@ -54,7 +53,7 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
             output["successful_runs"],
             job_path,
             convert_dict_keys_to_int(output["raw_results_map"])
-        ),
+        ) if hasattr(output, "raw_results_map") else None,
         database_entry["job_name"]
     )
 
@@ -203,3 +202,13 @@ class Runs:
 
 def convert_dict_keys_to_int(dictionary):
     return {int(key): value for key, value in dictionary.items()}
+
+
+def volume(x):
+    if isinstance(x, int):
+        return x
+
+    result = 1
+    for x_i in x:
+        result *= x_i
+    return result

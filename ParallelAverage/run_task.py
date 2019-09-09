@@ -19,8 +19,10 @@ import dill
 import time as time_mod
 import random
 from collections import defaultdict
+from itertools import product
 from pathlib import Path
-from ParallelAverage import Dataset, SimpleFlock
+import traceback
+from ParallelAverage import Dataset, SimpleFlock, volume
 
 
 task_id = int(sys.argv[1])
@@ -58,7 +60,7 @@ if save_interpreter_state:
     dill.load_session(str(input_dir / "session.pkl"))
 
 
-def run_ids():
+def linear_run_ids():
     if dynamic_load_balancing:
         yield from range(task_id - 1, N_static_runs, N_tasks)
         while True:
@@ -81,22 +83,33 @@ def run_ids():
 
             yield from range(*chunk)
     else:
-        yield from range(task_id - 1, N_runs, N_tasks)
+        yield from range(task_id - 1, volume(N_runs), N_tasks)
+
+
+def run_ids():
+    if isinstance(N_runs, int):
+        yield from linear_run_ids()
+    else:
+        ranges = [range(n_i) for n_i in N_runs]
+        run_id_list = list(product(*ranges))
+        for linear_run_id in linear_run_ids():
+            yield run_id_list[linear_run_id]
 
 
 def execute_run(run_id):
     global error_message
 
-    os.environ["RUN_ID"] = str(run_id)
+    os.environ["RUN_ID"] = repr(run_id)
     try:
         result = function(*args, **kwargs)
     except Exception as e:
-        error_message = type(e).__name__ + ": " + str(e)
+        tb = traceback.format_exception(type(e), e, None)
+        error_message = tb[0] + "".join(tb[3:])
         return None
 
     try:
         with open(job_dir / "progress.txt", "a") as f:
-            f.write(str(run_id) + "\n")
+            f.write(repr(run_id) + "\n")
     except Exception:
         print("Error while writing to progress.txt")
 
