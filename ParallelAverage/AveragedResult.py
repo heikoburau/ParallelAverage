@@ -74,7 +74,7 @@ class AveragedResult:
         self.estimated_variance = deepcopy(estimated_variance)
         self.successful_run_ids = successful_run_ids
         self.failed_run_ids = failed_run_ids
-        self.runs = runs
+        self.runs = {eval(run_id): value for run_id, value in runs.items()}
         self.job_name = job_name
 
     @property

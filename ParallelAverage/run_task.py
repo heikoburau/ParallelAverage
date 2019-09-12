@@ -134,7 +134,7 @@ def dump_result_of_single_run(run_id, result):
         else:
             runs = json.load(f)
 
-        runs[run_id] = polish(result)
+        runs[str(run_id)] = polish(result)
 
         f.seek(0)
         json.dump(runs, f, indent=2, cls=encoder)
