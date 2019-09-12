@@ -52,8 +52,8 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
         Runs(
             output["successful_runs"],
             job_path,
-            convert_dict_keys_to_int(output["raw_results_map"])
-        ) if hasattr(output, "raw_results_map") else None,
+            output["raw_results_map"]
+        ) if "raw_results_map" in output else None,
         database_entry["job_name"]
     )
 
@@ -74,7 +74,7 @@ class AveragedResult:
         self.estimated_variance = deepcopy(estimated_variance)
         self.successful_run_ids = successful_run_ids
         self.failed_run_ids = failed_run_ids
-        self.runs = {eval(run_id): value for run_id, value in runs.items()}
+        self.runs = runs
         self.job_name = job_name
 
     @property
@@ -181,9 +181,12 @@ class Runs:
         return iter(self.run_ids)
 
     def __getitem__(self, run_id):
+        if not isinstance(run_id, str):
+            run_id = repr(run_id)
+
         file_id = self.raw_results_map[run_id]
         with open(self.job_path / "data_output" / f"{file_id}_raw_results.json") as f:
-            return json.load(f, cls=NumpyDecoder)[str(run_id)]
+            return json.load(f, cls=NumpyDecoder)[run_id]
 
     def __len__(self):
         return len(self.run_ids)
@@ -198,10 +201,6 @@ class Runs:
     def items(self):
         for run_id in self:
             yield run_id, self[run_id]
-
-
-def convert_dict_keys_to_int(dictionary):
-    return {int(key): value for key, value in dictionary.items()}
 
 
 def volume(x):

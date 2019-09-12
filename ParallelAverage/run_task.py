@@ -88,18 +88,18 @@ def linear_run_ids():
 
 def run_ids():
     if isinstance(N_runs, int):
-        yield from linear_run_ids()
+        yield from (repr(run_id) for run_id in linear_run_ids())
     else:
         ranges = [range(n_i) for n_i in N_runs]
         run_id_list = list(product(*ranges))
         for linear_run_id in linear_run_ids():
-            yield run_id_list[linear_run_id]
+            yield repr(run_id_list[linear_run_id])
 
 
 def execute_run(run_id):
     global error_message
 
-    os.environ["RUN_ID"] = repr(run_id)
+    os.environ["RUN_ID"] = run_id
     try:
         result = function(*args, **kwargs)
     except Exception as e:
@@ -109,7 +109,7 @@ def execute_run(run_id):
 
     try:
         with open(job_dir / "progress.txt", "a") as f:
-            f.write(repr(run_id) + "\n")
+            f.write(run_id + "\n")
     except Exception:
         print("Error while writing to progress.txt")
 
@@ -134,7 +134,7 @@ def dump_result_of_single_run(run_id, result):
         else:
             runs = json.load(f)
 
-        runs[str(run_id)] = polish(result)
+        runs[run_id] = polish(result)
 
         f.seek(0)
         json.dump(runs, f, indent=2, cls=encoder)
@@ -155,7 +155,7 @@ def dump_task_results(done):
                         "run_id": failed_runs[-1] if failed_runs else -1,
                         "message": error_message
                     },
-                    "raw_results_map": {i: task_id for i in successful_runs} if keep_runs else None,
+                    "raw_results_map": {run_id: task_id for run_id in successful_runs} if keep_runs else None,
                     "task_result": [
                         task_result[i].to_json() if isinstance(task_result[i], Dataset) else task_result[i]
                         for i in sorted(task_result)
