@@ -38,7 +38,7 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
 
     num_still_running = volume(database_entry["N_runs"]) - num_finished_runs
     if num_still_running > 0:
-        warn(f"{num_still_running} / {volume(database_entry['N_runs'])} runs are not ready yet!")
+        print(f"{num_still_running} / {volume(database_entry['N_runs'])} runs are not ready yet!")
     elif database_entry["status"] == "running":
         database_entry["status"] = "completed"
         database_entry.save(database_path)
