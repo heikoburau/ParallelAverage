@@ -30,11 +30,6 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
     num_finished_runs = len(output["successful_runs"]) + len(output["failed_runs"])
 
     if output["failed_runs"]:
-        warn(
-            f"{len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
-            f"Error message of run {output['error_run_id']}:\n\n"
-            f"{output['error_message']}"
-        )
         print(
             f"{len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
             f"Error message of run {output['error_run_id']}:\n\n"

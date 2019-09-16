@@ -103,9 +103,12 @@ def execute_run(run_id):
     try:
         result = function(*args, **kwargs)
     except Exception as e:
-        tb = traceback.format_exception(sys.last_type, sys.last_value, sys.last_traceback)
-        error_message = "".join(tb)
-        traceback.print_last()
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        # tb = traceback.format_exception(type(e), e, sys.last_traceback)
+        tb = traceback.format_exception(exc_type, exc_value, exc_tb)
+        error_message = "".join([tb[0]] + tb[2:])
+        # traceback.print_last()
+        print(error_message)
         return None
 
     try:
