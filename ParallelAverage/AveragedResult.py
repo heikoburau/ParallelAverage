@@ -35,6 +35,11 @@ def load_averaged_result(database_entry, database_path, encoder, decoder):
             f"Error message of run {output['error_run_id']}:\n\n"
             f"{output['error_message']}"
         )
+        print(
+            f"{len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
+            f"Error message of run {output['error_run_id']}:\n\n"
+            f"{output['error_message']}"
+        )
 
     num_still_running = volume(database_entry["N_runs"]) - num_finished_runs
     if num_still_running > 0:
