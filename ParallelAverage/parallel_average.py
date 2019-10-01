@@ -1,5 +1,7 @@
 from .DatabaseEntry import DatabaseEntry, load_database
+from .Collector import Collector
 from .AveragedResult import load_averaged_result
+from .CollectiveResult import load_collective_result
 from .json_numpy import NumpyEncoder, NumpyDecoder
 from .queuing_systems import slurm, local_machine
 
@@ -127,6 +129,31 @@ def largest_existing_job_index(parallel_average_path):
     return max(int(re.search(r"\d+", dir_str).group()) for dir_str in dirs_starting_with_a_number)
 
 
+def check_result(database_entry, database_path):
+    job_path = Path(database_entry["output"]).parent
+
+    with open(database_entry["output"]) as f:
+        output = json.load(f)
+
+    num_finished_runs = len(output["successful_runs"]) + len(output["failed_runs"])
+
+    if output["failed_runs"]:
+        print(
+            f"{len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
+            f"Error message of run {output['error_run_id']}:\n\n"
+            f"{output['error_message']}"
+        )
+
+    num_still_running = volume(database_entry["N_runs"]) - num_finished_runs
+    if num_still_running > 0:
+        print(f"{num_still_running} / {volume(database_entry['N_runs'])} runs are not ready yet!")
+    elif database_entry["status"] == "running":
+        database_entry["status"] = "completed"
+        database_entry.save(database_path)
+
+    return num_finished_runs > 0
+
+
 def parallel_average(
     N_runs,
     N_tasks,
@@ -188,7 +215,12 @@ def parallel_average(
                             cleanup(path=path)
                             return
                         else:
-                            return load_averaged_result(entry, database_path, encoder, decoder)
+                            Collector(entry, database_path, encoder, decoder).run()
+                            if check_result(entry, database_path):
+                                if average_results is None:
+                                    return load_collective_result(entry)
+                                else:
+                                    return load_averaged_result(entry)
 
                 if action != actions.default or force_caching:
                     best_fits_str = ""
@@ -236,6 +268,35 @@ def parallel_average(
                 cleanup(path=path)
 
         return wrapper
+    return decorator
+
+
+def parallel(
+    N_runs,
+    N_tasks,
+    save_interpreter_state=True,
+    dynamic_load_balancing=False,
+    encoder=NumpyEncoder,
+    decoder=NumpyDecoder,
+    path=".",
+    queuing_system="Slurm",
+    **queuing_system_options
+):
+    def decorator(function):
+        return parallel_average(
+            N_runs,
+            N_tasks,
+            average_results=None,
+            keep_runs=True,
+            save_interpreter_state=save_interpreter_state,
+            dynamic_load_balancing=dynamic_load_balancing,
+            encoder=encoder,
+            decoder=decoder,
+            path=path,
+            queuing_system=queuing_system,
+            **queuing_system_options
+        )(function)
+
     return decorator
 
 

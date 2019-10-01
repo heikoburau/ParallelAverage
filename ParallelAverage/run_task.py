@@ -32,7 +32,7 @@ data_dir.mkdir(exist_ok=True)
 input_dir = job_dir / "input"
 
 
-to_be_averaged = lambda i: average_results == 'all' or i in average_results
+to_be_averaged = lambda i: average_results is not None and (average_results == 'all' or i in average_results)
 
 
 with open(input_dir / "run_task_arguments.json", 'r') as f:
@@ -183,11 +183,12 @@ for run_id in run_ids():
         if keep_runs:
             dump_result_of_single_run(run_id, run_result)
 
-        for i, r in enumerate(run_result):
-            if to_be_averaged(i):
-                task_result[i].add_sample(r)
-            else:
-                task_result[i] = r
+        if average_results is not None:
+            for i, r in enumerate(run_result):
+                if to_be_averaged(i):
+                    task_result[i].add_sample(r)
+                else:
+                    task_result[i] = r
 
         dump_task_results(done=False)
 

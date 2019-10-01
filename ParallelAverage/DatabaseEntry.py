@@ -33,16 +33,12 @@ class DatabaseEntry(dict):
         return not self == other
 
     def __str__(self):
-        average_results = self['average_results'] if 'average_results' in self else (
-            self['average_arrays'] if 'average_arrays' in self else None
-        )
-
         return (
             f"function_name: {self['function_name']}\n"
             f"args: {self['args']}\n"
             f"kwargs: {self['kwargs']}\n"
             f"N_runs: {self['N_runs']}\n"
-            f"average_results: {average_results}"
+            f"average_results: {self['average_results']}"
         )
 
     def save(self, database_path):

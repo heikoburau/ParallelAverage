@@ -1,4 +1,3 @@
-from .AverageCollector import AverageCollector
 from .json_numpy import NumpyDecoder
 from copy import deepcopy
 from pathlib import Path
@@ -6,42 +5,11 @@ from warnings import warn
 import json
 
 
-def load_averaged_result(database_entry, database_path, encoder, decoder):
+def load_averaged_result(database_entry):
     job_path = Path(database_entry["output"]).parent
-    if database_entry["status"] == "running":
-        try:
-            AverageCollector(job_path, database_entry["average_results"], encoder, decoder).run()
-        except FileNotFoundError:
-            # for backward compatibility
-            import os
-            from subprocess import run
-
-            package_path = Path(os.path.abspath(__file__)).parent
-            average_collector_file = package_path / "legacy" / "average_collector.sh"
-            run([str(average_collector_file), str(job_path.resolve()), str(package_path)])
 
     with open(database_entry["output"]) as f:
-        output = json.load(f, cls=decoder)
-
-    # for backward compatibility
-    if "successful_runs" not in output:
-        output["successful_runs"] = [0] * (output["N_total_runs"] - len(output["failed_runs"]))
-
-    num_finished_runs = len(output["successful_runs"]) + len(output["failed_runs"])
-
-    if output["failed_runs"]:
-        print(
-            f"{len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
-            f"Error message of run {output['error_run_id']}:\n\n"
-            f"{output['error_message']}"
-        )
-
-    num_still_running = volume(database_entry["N_runs"]) - num_finished_runs
-    if num_still_running > 0:
-        print(f"{num_still_running} / {volume(database_entry['N_runs'])} runs are not ready yet!")
-    elif database_entry["status"] == "running":
-        database_entry["status"] = "completed"
-        database_entry.save(database_path)
+        output = json.load(f)
 
     return AveragedResult(
         output["result"],
