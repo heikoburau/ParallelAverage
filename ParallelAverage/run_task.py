@@ -143,7 +143,12 @@ def dump_result_of_single_run(run_id, result):
         f.truncate()
 
 
-def dump_task_results(done):
+def dump_task_results(done, throttle):
+    global last_dump_timestamp
+
+    if throttle and time_mod.time() - last_dump_timestamp < 30:
+        return
+
     task_file = data_dir / f"{task_id}_task_output.json"
 
     with SimpleFlock(str(task_file) + ".lock"):
@@ -167,12 +172,14 @@ def dump_task_results(done):
                 indent=2,
                 cls=encoder
             )
+    last_dump_timestamp = time_mod.time()
 
 
 task_result = defaultdict(lambda: Dataset())
 successful_runs = []
 failed_runs = []
 error_message = ""
+last_dump_timestamp = time_mod.time()
 
 for run_id in run_ids():
     run_result = execute_run(run_id)
@@ -190,6 +197,6 @@ for run_id in run_ids():
                 else:
                     task_result[i] = r
 
-        dump_task_results(done=False)
+        dump_task_results(done=False, throttle=True)
 
-dump_task_results(done=True)
+dump_task_results(done=True, throttle=False)
