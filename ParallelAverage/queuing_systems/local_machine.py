@@ -33,7 +33,7 @@ def submit(N_tasks, job_name, job_path, user_options):
             daemon=True
         ).start()
 
-    print(f"starting {N_tasks} local processes", job_name)
+    print(f"[ParallelAverage] starting {N_tasks} local processes", job_name)
 
 
 def print_job_output(job_path):
@@ -41,10 +41,10 @@ def print_job_output(job_path):
     largest_output_file = max(output_files, key=lambda f: f.stat().st_size)
     with largest_output_file.open() as f:
         print(
-            f"content of largest job output file ({largest_output_file.name}):\n"
+            f"[ParallelAverage] content of largest job output file ({largest_output_file.name}):\n"
             f"{f.read()}"
         )
 
 
 def cancel_job(job_name):
-    raise NotImplementedError("cancelling a process on the local machine is not yet supported. Please do manually.")
+    raise NotImplementedError("[ParallelAverage] cancelling a process on the local machine is not yet supported. Please do manually.")

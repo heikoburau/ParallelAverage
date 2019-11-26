@@ -35,7 +35,7 @@ queuing_system_modules = {
 }
 
 
-class EntryDoesNotExist(RuntimeError):
+class EntryDoesNotExist(ValueError):
     pass
 
 
@@ -139,19 +139,63 @@ def check_result(database_entry, database_path):
 
     if output["failed_runs"]:
         print(
-            f"{len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
-            f"Error message of run {output['error_run_id']}:\n\n"
+            f"[ParallelAverage] Warning: {len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
+            f"[ParallelAverage] Error message of run {output['error_run_id']}:\n\n"
             f"{output['error_message']}"
         )
 
     num_still_running = volume(database_entry["N_runs"]) - num_finished_runs
     if num_still_running > 0:
-        print(f"{num_still_running} / {volume(database_entry['N_runs'])} runs are not ready yet!")
+        print(f"[ParallelAverage] Warning: {num_still_running} / {volume(database_entry['N_runs'])} runs are not ready yet!")
     elif database_entry["status"] == "running":
         database_entry["status"] = "completed"
         database_entry.save(database_path)
 
-    return num_finished_runs > 0
+    return len(output["successful_runs"]) > 0
+
+
+def load_result(function_name, args, kwargs, N_runs, path):
+    database_path = Path(path) / "parallel_average_database.json"
+
+    new_entry = DatabaseEntry(
+        {
+            "function_name": function_name,
+            "args": args,
+            "kwargs": kwargs,
+            "N_runs": N_runs,
+            "average_results": None
+        },
+        NumpyEncoder
+    )
+
+    try:
+        entry = next(entry for entry in load_database(database_path) if entry == new_entry)
+    except StopIteration:
+        best_fits_str = ""
+        for best_fit in find_best_fitting_entries_in_database(database_path, new_entry):
+            best_fits_str += str(best_fit) + "\n\n"
+        raise EntryDoesNotExist(
+            f"Best fitting entries in database:\n{best_fits_str}\n"
+            f"Invoked with:\n{new_entry}"
+        )
+
+    Collector(entry, database_path, NumpyEncoder, NumpyDecoder).run()
+    if check_result(entry, database_path):
+        return load_collective_result(entry)
+
+
+def load_job_name(job_name, path):
+    database_path = Path(path) / "parallel_average_database.json"
+    try:
+        entry = next(entry for entry in load_database(database_path) if entry["job_name"] == job_name)
+    except StopIteration:
+        raise EntryDoesNotExist(f"'{job_name}' was not found in {path}")
+
+    if check_result(entry, database_path):
+        if entry["average_results"] is None:
+            return load_collective_result(entry)
+        else:
+            return load_averaged_result(entry)
 
 
 def parallel_average(
@@ -215,12 +259,15 @@ def parallel_average(
                             cleanup(path=path)
                             return
                         else:
-                            Collector(entry, database_path, encoder, decoder).run()
-                            if check_result(entry, database_path):
-                                if average_results is None:
-                                    return load_collective_result(entry)
-                                else:
-                                    return load_averaged_result(entry)
+                            if entry["status"] != "completed":
+                                Collector(entry, database_path, encoder, decoder).run()
+                                if not check_result(entry, database_path):
+                                    return
+
+                            if entry["average_results"] is None:
+                                return load_collective_result(entry)
+                            else:
+                                return load_averaged_result(entry)
 
                 if action != actions.default or force_caching:
                     best_fits_str = ""

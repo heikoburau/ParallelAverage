@@ -13,6 +13,7 @@ from .simpleflock import SimpleFlock
 
 class Collector:
     def __init__(self, database_entry, database_path, encoder, decoder):
+        self.database_entry = database_entry
         self.job_path = Path(database_entry["output"]).parent
         self.input_path = self.job_path / "input"
         self.data_path = self.job_path / "data_output"
@@ -31,6 +32,23 @@ class Collector:
         self.raw_results_map = {}
 
     def run(self):
+        # try legacy code first
+        if [f for f in Path(self.database_entry["output"]).parent.iterdir() if f.is_dir() and f.name[:1].isdigit()]:
+            import os
+            from subprocess import run
+
+            package_path = Path(os.path.abspath(__file__)).parent
+            average_collector_file = package_path / "legacy" / "average_collector.sh"
+            run([str(average_collector_file), str(self.job_path.resolve()), str(package_path)])
+
+            with open(Path(self.database_entry["output"])) as f:
+                output = json.load(f)
+            output["successful_runs"] = list(set(range(output["N_total_runs"])) - set(output["failed_runs"]))
+            with open(Path(self.database_entry["output"]), 'w') as f:
+                json.dump(output, f, indent=2)
+
+            return
+
         for task_file in self.task_files:
             with SimpleFlock(str(task_file) + ".lock"):
                 with open(task_file, 'r') as f:
