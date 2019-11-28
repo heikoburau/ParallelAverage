@@ -213,6 +213,9 @@ def parallel_average(
     queuing_system="Slurm",
     **queuing_system_options
 ):
+    if N_tasks == "max":
+        N_tasks = volume(N_runs)
+
     def decorator(function):
         @wraps(function)
         def wrapper(*args, **kwargs):
