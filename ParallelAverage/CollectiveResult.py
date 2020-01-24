@@ -4,15 +4,15 @@ from pathlib import Path
 import json
 
 
-def load_collective_result(database_entry):
-    job_path = Path(database_entry["output"]).parent
+def load_collective_result(database_entry, path):
+    output_path = database_entry.output_path(path)
 
-    with open(database_entry["output"]) as f:
+    with open(output_path) as f:
         output = json.load(f)
 
     return CollectiveResult(
         output["successful_runs"],
-        job_path,
+        output_path.parent,
         output["raw_results_map"],
         database_entry["job_name"]
     )

@@ -129,10 +129,8 @@ def largest_existing_job_index(parallel_average_path):
     return max(int(re.search(r"\d+", dir_str).group()) for dir_str in dirs_starting_with_a_number)
 
 
-def check_result(database_entry, database_path):
-    job_path = Path(database_entry["output"]).parent
-
-    with open(database_entry["output"]) as f:
+def check_result(database_entry, database_path, path):
+    with open(database_entry.output_path(path)) as f:
         output = json.load(f)
 
     num_finished_runs = len(output["successful_runs"]) + len(output["failed_runs"])
@@ -180,8 +178,8 @@ def load_result(function_name, args, kwargs, N_runs, path):
         )
 
     Collector(entry, database_path, NumpyEncoder, NumpyDecoder).run()
-    if check_result(entry, database_path):
-        return load_collective_result(entry)
+    if check_result(entry, database_path, path):
+        return load_collective_result(entry, path)
 
 
 def load_job_name(job_name, path):
@@ -191,11 +189,11 @@ def load_job_name(job_name, path):
     except StopIteration:
         raise EntryDoesNotExist(f"'{job_name}' was not found in {path}")
 
-    if check_result(entry, database_path):
+    if check_result(entry, database_path, path):
         if entry["average_results"] is None:
-            return load_collective_result(entry)
+            return load_collective_result(entry, path)
         else:
-            return load_averaged_result(entry)
+            return load_averaged_result(entry, path)
 
 
 def parallel_average(
@@ -204,8 +202,6 @@ def parallel_average(
     average_results='all',
     save_interpreter_state=True,
     keep_runs=False,
-    ignore_cache=False,  # deprecated
-    force_caching=False,  # deprecated
     dynamic_load_balancing=False,
     encoder=NumpyEncoder,
     decoder=NumpyDecoder,
@@ -249,7 +245,7 @@ def parallel_average(
                 encoder
             )
 
-            if not action == actions.do_submit and not ignore_cache and database_path.stat().st_size > 0:
+            if action != actions.do_submit and database_path.stat().st_size > 0:
                 for entry in load_database(database_path):
                     if entry == new_entry:
                         if action == actions.print_job_output:
@@ -264,15 +260,15 @@ def parallel_average(
                         else:
                             if entry["status"] != "completed":
                                 Collector(entry, database_path, encoder, decoder).run()
-                                if not check_result(entry, database_path):
+                                if not check_result(entry, database_path, path):
                                     return
 
                             if entry["average_results"] is None:
-                                return load_collective_result(entry)
+                                return load_collective_result(entry, path)
                             else:
-                                return load_averaged_result(entry)
+                                return load_averaged_result(entry, path)
 
-                if action != actions.default or force_caching:
+                if action != actions.default:
                     best_fits_str = ""
                     for best_fit in find_best_fitting_entries_in_database(database_path, new_entry):
                         best_fits_str += str(best_fit) + "\n\n"
@@ -308,7 +304,7 @@ def parallel_average(
                 N_tasks, job_name, job_path, queuing_system_options
             )
 
-            new_entry["output"] = str((job_path / "output.json").resolve())
+            new_entry["output"] = str((job_path / "output.json").relative_to(path))
             new_entry["job_name"] = job_name
             new_entry["status"] = "running"
             new_entry["datetime"] = datetime.now().isoformat()

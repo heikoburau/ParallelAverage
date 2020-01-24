@@ -14,7 +14,7 @@ from .simpleflock import SimpleFlock
 class Collector:
     def __init__(self, database_entry, database_path, encoder, decoder):
         self.database_entry = database_entry
-        self.job_path = Path(database_entry["output"]).parent
+        self.job_path = database_entry.output_path(database_path.parent).parent
         self.input_path = self.job_path / "input"
         self.data_path = self.job_path / "data_output"
         self.data_path.mkdir(exist_ok=True)

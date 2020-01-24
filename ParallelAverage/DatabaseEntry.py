@@ -1,6 +1,7 @@
 from .simpleflock import SimpleFlock
 from copy import deepcopy
 import json
+from pathlib import Path
 
 
 class DatabaseEntry(dict):
@@ -40,6 +41,10 @@ class DatabaseEntry(dict):
             f"N_runs: {self['N_runs']}\n"
             f"average_results: {self['average_results']}"
         )
+
+    def output_path(self, path):
+        output_path = Path(self["output"])
+        return output_path if output_path.is_absolute() else path / output_path
 
     def save(self, database_path):
         with SimpleFlock(str(database_path.parent / "dblock")):
