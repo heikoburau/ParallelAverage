@@ -7,12 +7,13 @@ The total result has the same structure as an individual result.
 from pathlib import Path
 from collections import defaultdict
 import json
+from .json_numpy import NumpyEncoder, NumpyDecoder
 from .Dataset import Dataset
 from .simpleflock import SimpleFlock
 
 
 class Collector:
-    def __init__(self, database_entry, database_path, encoder, decoder):
+    def __init__(self, database_entry, database_path):
         self.database_entry = database_entry
         self.job_path = database_entry.output_path(database_path.parent).parent
         self.input_path = self.job_path / "input"
@@ -21,8 +22,6 @@ class Collector:
         self.task_files = [t for t in self.data_path.iterdir() if str(t).endswith("_task_output.json")]
 
         self.average_results = database_entry["average_results"]
-        self.encoder = encoder
-        self.decoder = decoder
 
         self.total_result = defaultdict(lambda: Dataset())
         self.successful_runs = []
@@ -62,7 +61,7 @@ class Collector:
                         if self.to_be_averaged(i):
                             self.total_result[i] += Dataset.from_json(r)
                         else:
-                            self.total_result[i] = json.loads(json.dumps(r), cls=self.decoder)
+                            self.total_result[i] = json.loads(json.dumps(r), cls=NumpyDecoder)
 
             if task_output["failed_runs"]:
                 self.failed_runs += task_output["failed_runs"]
@@ -107,7 +106,7 @@ class Collector:
             })
 
         with open(self.job_path / "output.json", 'w') as f:
-            json.dump(output, f, indent=2, cls=self.encoder)
+            json.dump(output, f, indent=2, cls=NumpyEncoder)
 
 
 def polish(x):

@@ -16,13 +16,14 @@ import os
 import sys
 import json
 import dill
+import pickle
 import time as time_mod
 import random
 from collections import defaultdict
 from itertools import product
 from pathlib import Path
 import traceback
-from ParallelAverage import Dataset, SimpleFlock, volume
+from ParallelAverage import Dataset, SimpleFlock, volume, NumpyEncoder
 
 
 task_id = int(sys.argv[1])
@@ -45,6 +46,7 @@ with open(input_dir / "run_task_arguments.json", 'r') as f:
     dynamic_load_balancing = parameters["dynamic_load_balancing"]
     N_static_runs = parameters["N_static_runs"]
     keep_runs = parameters["keep_runs"]
+    encoding = parameters["encoding"]
 
 with open(input_dir / "run_task.d", 'rb') as f:
     run_task = dill.load(f)
@@ -52,7 +54,6 @@ with open(input_dir / "run_task.d", 'rb') as f:
 function = run_task["function"]
 args = run_task["args"]
 kwargs = run_task["kwargs"]
-encoder = run_task["encoder"]
 
 os.environ["JOB_NAME"] = job_name
 
@@ -128,19 +129,24 @@ def polish(x):
 
 
 def dump_result_of_single_run(run_id, result):
-    runs_of_task = data_dir / f"{task_id}_raw_results.json"
+    runs_of_task = data_dir / f"{task_id}_raw_results.{encoding}"
     runs_of_task.touch()
-    with open(runs_of_task, 'r+') as f:
+    with open(runs_of_task, 'r' if encoding == "json" else 'rb') as f:
         if runs_of_task.stat().st_size == 0:
             runs = {}
         else:
-            runs = json.load(f)
+            if encoding == "json":
+                runs = json.load(f)
+            elif encoding == "pickle":
+                runs = pickle.load(f)
 
-        runs[run_id] = polish(result)
+    runs[run_id] = polish(result)
 
-        f.seek(0)
-        json.dump(runs, f, indent=2, cls=encoder)
-        f.truncate()
+    with open(runs_of_task, 'w' if encoding == "json" else 'wb') as f:
+        if encoding == "json":
+            json.dump(runs, f, indent=2, cls=NumpyEncoder)
+        elif encoding == "pickle":
+            pickle.dump(runs, f)
 
 
 def dump_task_results(done, throttle):
@@ -170,7 +176,7 @@ def dump_task_results(done, throttle):
                 },
                 f,
                 indent=2,
-                cls=encoder
+                cls=NumpyEncoder
             )
     last_dump_timestamp = time_mod.time()
 

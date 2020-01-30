@@ -2,22 +2,21 @@ from .simpleflock import SimpleFlock
 from copy import deepcopy
 import json
 from pathlib import Path
+from .json_numpy import NumpyEncoder
 
 
 class DatabaseEntry(dict):
-    def __init__(self, input_dict, encoder=None):
+    def __init__(self, input_dict):
         super().__init__(deepcopy(input_dict))
-        self.encoder = encoder
-
         # convert fields to a genuine json objects
         self["N_runs"] = json.loads(
             json.dumps(self["N_runs"])
         )
         self["args"] = json.loads(
-            json.dumps(self["args"], cls=encoder),
+            json.dumps(self["args"], cls=NumpyEncoder),
         )
         self["kwargs"] = json.loads(
-            json.dumps(self["kwargs"], cls=encoder),
+            json.dumps(self["kwargs"], cls=NumpyEncoder),
         )
 
     def __eq__(self, other):
@@ -58,7 +57,7 @@ class DatabaseEntry(dict):
                 entries = [e for e in entries if e != self]
                 entries.append(self)
                 f.seek(0)
-                json.dump(entries, f, indent=2, cls=self.encoder)
+                json.dump(entries, f, indent=2, cls=NumpyEncoder)
                 f.truncate()
 
     def remove(self, database_path):
@@ -72,7 +71,7 @@ class DatabaseEntry(dict):
                 entries = [DatabaseEntry(entry) for entry in entries]
                 entries = [e for e in entries if e != self]
                 f.seek(0)
-                json.dump(entries, f, indent=2, cls=self.encoder)
+                json.dump(entries, f, indent=2, cls=NumpyEncoder)
                 f.truncate()
 
     def distance_to(self, other):

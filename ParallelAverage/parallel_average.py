@@ -69,7 +69,7 @@ def setup_task_input_data(
     function,
     args,
     kwargs,
-    encoder
+    encoding
 ):
     with (input_path / "run_task_arguments.json").open('w') as f:
         json.dump(
@@ -81,7 +81,8 @@ def setup_task_input_data(
                 "save_interpreter_state": save_interpreter_state,
                 "dynamic_load_balancing": dynamic_load_balancing,
                 "N_static_runs": N_static_runs,
-                "keep_runs": keep_runs
+                "keep_runs": keep_runs,
+                "encoding": encoding
             },
             f
         )
@@ -91,8 +92,7 @@ def setup_task_input_data(
             {
                 "function": function,
                 "args": args,
-                "kwargs": kwargs,
-                "encoder": encoder
+                "kwargs": kwargs
             },
             f
         )
@@ -155,16 +155,13 @@ def check_result(database_entry, database_path, path):
 def load_result(function_name, args, kwargs, N_runs, path):
     database_path = Path(path) / "parallel_average_database.json"
 
-    new_entry = DatabaseEntry(
-        {
-            "function_name": function_name,
-            "args": args,
-            "kwargs": kwargs,
-            "N_runs": N_runs,
-            "average_results": None
-        },
-        NumpyEncoder
-    )
+    new_entry = DatabaseEntry({
+        "function_name": function_name,
+        "args": args,
+        "kwargs": kwargs,
+        "N_runs": N_runs,
+        "average_results": None
+    })
 
     try:
         entry = next(entry for entry in load_database(database_path) if entry == new_entry)
@@ -203,14 +200,15 @@ def parallel_average(
     save_interpreter_state=True,
     keep_runs=False,
     dynamic_load_balancing=False,
-    encoder=NumpyEncoder,
-    decoder=NumpyDecoder,
+    encoding="json",
     path=".",
     queuing_system="Slurm",
     **queuing_system_options
 ):
     if N_tasks == "max":
         N_tasks = volume(N_runs)
+
+    assert encoding in ["json", "pickle"]
 
     def decorator(function):
         @wraps(function)
@@ -241,8 +239,7 @@ def parallel_average(
                     "kwargs": kwargs,
                     "N_runs": N_runs,
                     "average_results": average_results
-                },
-                encoder
+                }
             )
 
             if action != actions.do_submit and database_path.stat().st_size > 0:
@@ -259,12 +256,12 @@ def parallel_average(
                             return
                         else:
                             if entry["status"] != "completed":
-                                Collector(entry, database_path, encoder, decoder).run()
+                                Collector(entry, database_path).run()
                                 if not check_result(entry, database_path, path):
                                     return
 
                             if entry["average_results"] is None:
-                                return load_collective_result(entry, path)
+                                return load_collective_result(entry, path, encoding)
                             else:
                                 return load_averaged_result(entry, path)
 
@@ -297,7 +294,7 @@ def parallel_average(
             setup_task_input_data(
                 job_name, input_path, N_runs, N_tasks, average_results, save_interpreter_state,
                 dynamic_load_balancing, N_static_runs, keep_runs,
-                function, args, kwargs, encoder
+                function, args, kwargs, encoding
             )
 
             queuing_system_module.submit(
@@ -322,8 +319,7 @@ def parallel(
     N_tasks,
     save_interpreter_state=True,
     dynamic_load_balancing=False,
-    encoder=NumpyEncoder,
-    decoder=NumpyDecoder,
+    encoding="json",
     path=".",
     queuing_system="Slurm",
     **queuing_system_options
@@ -336,8 +332,7 @@ def parallel(
             keep_runs=True,
             save_interpreter_state=save_interpreter_state,
             dynamic_load_balancing=dynamic_load_balancing,
-            encoder=encoder,
-            decoder=decoder,
+            encoding=encoding,
             path=path,
             queuing_system=queuing_system,
             **queuing_system_options

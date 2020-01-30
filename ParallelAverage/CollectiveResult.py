@@ -1,10 +1,9 @@
 from .json_numpy import NumpyDecoder
-from copy import deepcopy
-from pathlib import Path
 import json
+import pickle
 
 
-def load_collective_result(database_entry, path):
+def load_collective_result(database_entry, path, encoding):
     output_path = database_entry.output_path(path)
 
     with open(output_path) as f:
@@ -14,12 +13,13 @@ def load_collective_result(database_entry, path):
         output["successful_runs"],
         output_path.parent,
         output["raw_results_map"],
-        database_entry["job_name"]
+        database_entry["job_name"],
+        encoding
     )
 
 
 class CollectiveResult:
-    def __init__(self, run_ids, job_path, raw_results_map, job_name):
+    def __init__(self, run_ids, job_path, raw_results_map, job_name, encoding):
         self.run_ids = run_ids
         if isinstance(self.run_ids[0], str):
             self.run_ids = [eval(run_id) for run_id in self.run_ids]
@@ -28,6 +28,7 @@ class CollectiveResult:
         self.job_path = job_path
         self.raw_results_map = raw_results_map
         self.job_name = job_name
+        self.encoding = encoding
 
     def __iter__(self):
         return iter(self.run_ids)
@@ -37,8 +38,16 @@ class CollectiveResult:
             run_id = repr(run_id)
 
         file_id = self.raw_results_map[run_id]
-        with open(self.job_path / "data_output" / f"{file_id}_raw_results.json") as f:
-            return json.load(f, cls=NumpyDecoder)[run_id]
+        if self.encoding == "json":
+            with open(self.job_path / "data_output" / f"{file_id}_raw_results.json") as f:
+                return json.load(f, cls=NumpyDecoder)[run_id]
+        elif self.encoding == "pickle":
+            result_path = self.job_path / "data_output" / f"{file_id}_raw_results.pickle"
+            if result_path.stat().st_size > 0:
+                with open(result_path, 'rb') as f:
+                    return pickle.load(f)[run_id]
+            else:
+                return None
 
     def __len__(self):
         return len(self.run_ids)
