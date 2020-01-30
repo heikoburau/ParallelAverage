@@ -152,7 +152,7 @@ def check_result(database_entry, database_path, path):
     return len(output["successful_runs"]) > 0
 
 
-def load_result(function_name, args, kwargs, N_runs, path):
+def load_result(function_name, args, kwargs, N_runs, path, encoding="json"):
     database_path = Path(path) / "parallel_average_database.json"
 
     new_entry = DatabaseEntry({
@@ -176,10 +176,13 @@ def load_result(function_name, args, kwargs, N_runs, path):
 
     Collector(entry, database_path, NumpyEncoder, NumpyDecoder).run()
     if check_result(entry, database_path, path):
-        return load_collective_result(entry, path)
+        if entry["average_results"] is None:
+            return load_collective_result(entry, path, encoding)
+        else:
+            return load_averaged_result(entry, path)
 
 
-def load_job_name(job_name, path):
+def load_job_name(job_name, path, encoding="json"):
     database_path = Path(path) / "parallel_average_database.json"
     try:
         entry = next(entry for entry in load_database(database_path) if entry["job_name"] == job_name)
@@ -188,7 +191,7 @@ def load_job_name(job_name, path):
 
     if check_result(entry, database_path, path):
         if entry["average_results"] is None:
-            return load_collective_result(entry, path)
+            return load_collective_result(entry, path, encoding)
         else:
             return load_averaged_result(entry, path)
 
@@ -257,8 +260,8 @@ def parallel_average(
                         else:
                             if entry["status"] != "completed":
                                 Collector(entry, database_path).run()
-                                if not check_result(entry, database_path, path):
-                                    return
+                            if not check_result(entry, database_path, path):
+                                return
 
                             if entry["average_results"] is None:
                                 return load_collective_result(entry, path, encoding)
