@@ -1,12 +1,10 @@
 from .CollectiveResult import CollectiveResult
 from .json_numpy import NumpyDecoder
 from copy import deepcopy
-from pathlib import Path
-from warnings import warn
 import json
 
 
-def load_averaged_result(database_entry, path):
+def load_averaged_result(database_entry, path, encoding):
     output_path = database_entry.output_path(path)
 
     with open(output_path) as f:
@@ -22,7 +20,8 @@ def load_averaged_result(database_entry, path):
             output["successful_runs"],
             output_path.parent,
             output["raw_results_map"],
-            database_entry["job_name"]
+            database_entry["job_name"],
+            encoding
         ) if "raw_results_map" in output else None,
         database_entry["job_name"]
     )

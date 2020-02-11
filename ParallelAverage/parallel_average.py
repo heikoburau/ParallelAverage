@@ -1,5 +1,6 @@
 from .DatabaseEntry import DatabaseEntry, load_database
 from .Collector import Collector
+from .gathering import gather
 from .AveragedResult import load_averaged_result
 from .CollectiveResult import load_collective_result
 from .json_numpy import NumpyEncoder, NumpyDecoder
@@ -174,12 +175,12 @@ def load_result(function_name, args, kwargs, N_runs, path, encoding="json"):
             f"Invoked with:\n{new_entry}"
         )
 
-    Collector(entry, database_path, NumpyEncoder, NumpyDecoder).run()
+    gather(entry, database_path)
     if check_result(entry, database_path, path):
         if entry["average_results"] is None:
             return load_collective_result(entry, path, encoding)
         else:
-            return load_averaged_result(entry, path)
+            return load_averaged_result(entry, path, encoding)
 
 
 def load_job_name(job_name, path, encoding="json"):
@@ -193,7 +194,7 @@ def load_job_name(job_name, path, encoding="json"):
         if entry["average_results"] is None:
             return load_collective_result(entry, path, encoding)
         else:
-            return load_averaged_result(entry, path)
+            return load_averaged_result(entry, path, encoding)
 
 
 def parallel_average(
@@ -259,14 +260,14 @@ def parallel_average(
                             return
                         else:
                             if entry["status"] != "completed":
-                                Collector(entry, database_path).run()
+                                gather(entry, database_path)
                             if not check_result(entry, database_path, path):
                                 return
 
                             if entry["average_results"] is None:
                                 return load_collective_result(entry, path, encoding)
                             else:
-                                return load_averaged_result(entry, path)
+                                return load_averaged_result(entry, path, encoding)
 
                 if action != actions.default:
                     best_fits_str = ""
