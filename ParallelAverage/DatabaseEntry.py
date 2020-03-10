@@ -1,12 +1,13 @@
+from .JobPath import JobPath
+from .json_numpy import NumpyEncoder, NumpyDecoder
 from .simpleflock import SimpleFlock
 from copy import deepcopy
-import json
 from pathlib import Path
-from .json_numpy import NumpyEncoder
+import json
 
 
 class DatabaseEntry(dict):
-    def __init__(self, input_dict):
+    def __init__(self, input_dict, database_path):
         super().__init__(deepcopy(input_dict))
         # convert fields to a genuine json objects
         self["N_runs"] = json.loads(
@@ -18,6 +19,7 @@ class DatabaseEntry(dict):
         self["kwargs"] = json.loads(
             json.dumps(self["kwargs"], cls=NumpyEncoder),
         )
+        self.database_path = database_path
 
     def __eq__(self, other):
         try:
@@ -41,38 +43,73 @@ class DatabaseEntry(dict):
             f"average_results: {self['average_results']}"
         )
 
-    def output_path(self, path):
-        output_path = Path(self["output"])
-        return output_path if output_path.is_absolute() else path / output_path
+    @property
+    def job_path(self):
+        return JobPath(self.output_path.parent)
 
-    def save(self, database_path):
-        with SimpleFlock(str(database_path.parent / "dblock")):
-            with open(database_path, 'r+') as f:
-                if database_path.stat().st_size == 0:
+    @property
+    def output_path(self):
+        output_path = Path(self["output"])
+        return output_path if output_path.is_absolute() else self.database_path.parent / output_path
+
+    @property
+    def output(self):
+        with open(self.output_path) as f:
+            return json.load(f, cls=NumpyDecoder)
+
+    def check_result(self):
+        output = self.output
+
+        num_finished_runs = len(output["successful_runs"]) + len(output["failed_runs"])
+
+        if output["failed_runs"]:
+            print(
+                f"[ParallelAverage] Warning: {len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
+                f"[ParallelAverage] Error message of run {output['error_message']['run_id']}:\n\n"
+                f"{output['error_message']['message']}"
+            )
+
+        num_still_running = volume(self["N_runs"]) - num_finished_runs
+        if num_still_running > 0:
+            print(f"[ParallelAverage] Warning: {num_still_running} / {volume(self['N_runs'])} runs are not ready yet!")
+        elif self["status"] == "running":
+            self["status"] = "completed"
+            self.save()
+
+        return len(output["successful_runs"]) > 0
+
+    def save(self):
+        with SimpleFlock(str(self.database_path.parent / "dblock")):
+            with open(self.database_path, 'r+') as f:
+                if self.database_path.stat().st_size == 0:
                     entries = []
                 else:
                     entries = json.load(f)
 
-                entries = [DatabaseEntry(entry) for entry in entries]
+                entries = [DatabaseEntry(entry, self.database_path) for entry in entries]
                 entries = [e for e in entries if e != self]
                 entries.append(self)
                 f.seek(0)
                 json.dump(entries, f, indent=2, cls=NumpyEncoder)
                 f.truncate()
 
-    def remove(self, database_path):
-        with SimpleFlock(str(database_path.parent / "dblock")):
-            with open(database_path, 'r+') as f:
-                if database_path.stat().st_size == 0:
+    def remove(self):
+        with SimpleFlock(str(self.database_path.parent / "dblock")):
+            with open(self.database_path, 'r+') as f:
+                if self.database_path.stat().st_size == 0:
                     entries = []
                 else:
                     entries = json.load(f)
 
-                entries = [DatabaseEntry(entry) for entry in entries]
+                entries = [DatabaseEntry(entry, self.database_path) for entry in entries]
                 entries = [e for e in entries if e != self]
                 f.seek(0)
                 json.dump(entries, f, indent=2, cls=NumpyEncoder)
                 f.truncate()
+
+    @property
+    def best_fitting_entries_in_database(self):
+        return sorted(load_database(self.database_path), key=lambda db_entry: db_entry.distance_to(self))[:3]
 
     def distance_to(self, other):
         result = 0
@@ -113,4 +150,14 @@ def load_database(database_path):
             else:
                 entries = json.load(f)
 
-    return [DatabaseEntry(entry) for entry in entries]
+    return [DatabaseEntry(entry, database_path) for entry in entries]
+
+
+def volume(x):
+    if isinstance(x, int):
+        return x
+
+    result = 1
+    for x_i in x:
+        result *= x_i
+    return result

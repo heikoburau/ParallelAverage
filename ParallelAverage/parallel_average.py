@@ -1,23 +1,20 @@
+from .prepare_submission import setup_task_input_data, setup_dynamic_load_balancing
 from .DatabaseEntry import DatabaseEntry, load_database
-from .Collector import Collector
 from .gathering import gather
 from .AveragedResult import load_averaged_result
 from .CollectiveResult import load_collective_result
-from .json_numpy import NumpyEncoder, NumpyDecoder
+from .JobPath import JobPath
+from .re_submit import prepare_re_submission
 from .queuing_systems import slurm, local_machine
-
-import __main__ as _main_module
 
 import os
 import json
-import dill
 import re
 from pathlib import Path
 from shutil import rmtree
 from datetime import datetime
 from functools import wraps
 from collections import namedtuple
-import pickle
 
 
 package_path = Path(os.path.abspath(__file__)).parent
@@ -26,8 +23,8 @@ action_argname = "__parallel_average_action__"
 # list of actions
 actions = namedtuple(
     "Actions",
-    "default do_submit dont_submit print_job_output cancel_job"
-)._make(range(5))
+    "default do_submit dont_submit re_submit print_job_output cancel_job"
+)._make(range(6))
 
 
 queuing_system_modules = {
@@ -40,87 +37,6 @@ class EntryDoesNotExist(ValueError):
     pass
 
 
-def find_best_fitting_entries_in_database(database_path, entry):
-    return sorted(load_database(database_path), key=lambda db_entry: db_entry.distance_to(entry))[:3]
-
-
-def setup_dynamic_load_balancing(N_runs, N_tasks, input_path):
-    N_runs = volume(N_runs)
-    N_static_runs = N_runs // 4
-    N_dynamic_runs = N_runs - N_static_runs
-    chunk_size = max(1, N_dynamic_runs // 3 // N_tasks)
-    dynamic_slices = list(range(N_static_runs, N_runs, chunk_size)) + [N_runs]
-    chunks = list(zip(dynamic_slices[:-1], dynamic_slices[1:]))
-    with (input_path / "chunks.json").open('w') as f:
-        json.dump(chunks, f)
-
-    return N_static_runs
-
-
-def setup_task_input_data(
-    job_name,
-    input_path,
-    N_runs,
-    N_tasks,
-    average_results,
-    save_interpreter_state,
-    dynamic_load_balancing,
-    N_static_runs,
-    keep_runs,
-    function,
-    args,
-    kwargs,
-    encoding
-):
-    with (input_path / "run_task_arguments.json").open('w') as f:
-        json.dump(
-            {
-                "job_name": job_name,
-                "N_runs": N_runs,
-                "N_tasks": N_tasks,
-                "average_results": average_results,
-                "save_interpreter_state": save_interpreter_state,
-                "dynamic_load_balancing": dynamic_load_balancing,
-                "N_static_runs": N_static_runs,
-                "keep_runs": keep_runs,
-                "encoding": encoding
-            },
-            f
-        )
-
-    with (input_path / "run_task.d").open('wb') as f:
-        dill.dump(
-            {
-                "function": function,
-                "args": args,
-                "kwargs": kwargs
-            },
-            f
-        )
-
-    if save_interpreter_state:
-        removed_objects = {}
-        for name, obj in _main_module.__dict__.items():
-            if name in ("In", "Out") or (
-                name != "__name__" and name.startswith("_")
-            ):
-                removed_objects[name] = obj
-                continue
-
-            try:
-                dill.dumps(obj)
-            except (pickle.PicklingError, TypeError):
-                removed_objects[name] = obj
-
-        for name in removed_objects:
-            del _main_module.__dict__[name]
-
-        dill.dump_session(str(input_path / "session.pkl"), main=_main_module)
-
-        for name, obj in removed_objects.items():
-            _main_module.__dict__[name] = obj
-
-
 def largest_existing_job_index(parallel_average_path):
     dirs_starting_with_a_number = [
         d.name for d in parallel_average_path.iterdir() if d.is_dir() and d.name[:1].isdigit()
@@ -130,59 +46,6 @@ def largest_existing_job_index(parallel_average_path):
     return max(int(re.search(r"\d+", dir_str).group()) for dir_str in dirs_starting_with_a_number)
 
 
-def check_result(database_entry, database_path, path):
-    with open(database_entry.output_path(path)) as f:
-        output = json.load(f)
-
-    num_finished_runs = len(output["successful_runs"]) + len(output["failed_runs"])
-
-    if output["failed_runs"]:
-        print(
-            f"[ParallelAverage] Warning: {len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
-            f"[ParallelAverage] Error message of run {output['error_run_id']}:\n\n"
-            f"{output['error_message']}"
-        )
-
-    num_still_running = volume(database_entry["N_runs"]) - num_finished_runs
-    if num_still_running > 0:
-        print(f"[ParallelAverage] Warning: {num_still_running} / {volume(database_entry['N_runs'])} runs are not ready yet!")
-    elif database_entry["status"] == "running":
-        database_entry["status"] = "completed"
-        database_entry.save(database_path)
-
-    return len(output["successful_runs"]) > 0
-
-
-def load_result(function_name, args, kwargs, N_runs, path, encoding="json"):
-    database_path = Path(path) / "parallel_average_database.json"
-
-    new_entry = DatabaseEntry({
-        "function_name": function_name,
-        "args": args,
-        "kwargs": kwargs,
-        "N_runs": N_runs,
-        "average_results": None
-    })
-
-    try:
-        entry = next(entry for entry in load_database(database_path) if entry == new_entry)
-    except StopIteration:
-        best_fits_str = ""
-        for best_fit in find_best_fitting_entries_in_database(database_path, new_entry):
-            best_fits_str += str(best_fit) + "\n\n"
-        raise EntryDoesNotExist(
-            f"Best fitting entries in database:\n{best_fits_str}\n"
-            f"Invoked with:\n{new_entry}"
-        )
-
-    gather(entry, database_path)
-    if check_result(entry, database_path, path):
-        if entry["average_results"] is None:
-            return load_collective_result(entry, path, encoding)
-        else:
-            return load_averaged_result(entry, path, encoding)
-
-
 def load_job_name(job_name, path, encoding="json"):
     database_path = Path(path) / "parallel_average_database.json"
     try:
@@ -190,11 +53,11 @@ def load_job_name(job_name, path, encoding="json"):
     except StopIteration:
         raise EntryDoesNotExist(f"'{job_name}' was not found in {path}")
 
-    if check_result(entry, database_path, path):
+    if entry.check_result():
         if entry["average_results"] is None:
-            return load_collective_result(entry, path, encoding)
+            return load_collective_result(entry, encoding)
         else:
-            return load_averaged_result(entry, path, encoding)
+            return load_averaged_result(entry, encoding)
 
 
 def parallel_average(
@@ -237,79 +100,99 @@ def parallel_average(
                 )
 
             new_entry = DatabaseEntry(
-                {
-                    "function_name": function.__name__,
-                    "args": args,
-                    "kwargs": kwargs,
-                    "N_runs": N_runs,
-                    "average_results": average_results
-                }
+                dict(
+                    function_name=function.__name__,
+                    args=args,
+                    kwargs=kwargs,
+                    N_runs=N_runs,
+                    average_results=average_results
+                ),
+                database_path
             )
 
             if action != actions.do_submit and database_path.stat().st_size > 0:
-                for entry in load_database(database_path):
-                    if entry == new_entry:
-                        if action == actions.print_job_output:
-                            return queuing_system_module.print_job_output(
-                                parallel_average_path / entry["job_name"]
-                            )
-                        elif action == actions.cancel_job:
-                            queuing_system_module.cancel_job(entry["job_name"])
-                            entry.remove(database_path)
-                            cleanup(path=path)
-                            return
-                        else:
-                            if entry["status"] != "completed":
-                                gather(entry, database_path)
-                            if not check_result(entry, database_path, path):
-                                return
+                try:
+                    entry = next(entry for entry in load_database(database_path) if entry == new_entry)
+                except StopIteration:
+                    if action != actions.default:
+                        best_fits_str = ""
+                        for best_fit in new_entry.best_fitting_entries_in_database:
+                            best_fits_str += str(best_fit) + "\n\n"
 
-                            if entry["average_results"] is None:
-                                return load_collective_result(entry, path, encoding)
-                            else:
-                                return load_averaged_result(entry, path, encoding)
+                        raise EntryDoesNotExist(
+                            f"Best fitting entries in database:\n{best_fits_str}\n"
+                            f"Invoked with:\n{new_entry}"
+                        )
 
-                if action != actions.default:
-                    best_fits_str = ""
-                    for best_fit in find_best_fitting_entries_in_database(database_path, new_entry):
-                        best_fits_str += str(best_fit) + "\n\n"
-
-                    raise EntryDoesNotExist(
-                        f"Best fitting entries in database:\n{best_fits_str}\n"
-                        f"Invoked with:\n{new_entry}"
+                if action == actions.print_job_output:
+                    return queuing_system_module.print_job_output(
+                        parallel_average_path / entry["job_name"]
                     )
-            if action not in (actions.default, actions.do_submit):
+                elif action == actions.cancel_job:
+                    queuing_system_module.cancel_job(entry["job_name"])
+                    entry.remove()
+                    cleanup(path=path)
+                    return
+                elif action == actions.re_submit:
+                    if entry["status"] != "completed":
+                        gather(entry)
+                    if len(entry.output["successful_runs"]) == volume(entry["N_runs"]):
+                        raise ValueError("All runs have finished successfully. No need for re-submitting job.")
+                    queuing_system_module.cancel_job(entry["job_name"])
+                elif action == actions.default and "entry" not in locals():
+                    pass
+                else:
+                    if entry["status"] != "completed":
+                        gather(entry)
+                    entry.check_result()
+
+                    if entry["average_results"] is None:
+                        return load_collective_result(entry, encoding)
+                    else:
+                        return load_averaged_result(entry, encoding)
+
+            if action not in (actions.default, actions.do_submit, actions.re_submit):
                 raise EntryDoesNotExist()
+
+            if action == actions.do_submit and "entry" in locals():
+                queuing_system_module.cancel_job(entry["job_name"])
 
             assert N_tasks <= volume(N_runs), "'N_tasks' has to be less than or equal to 'N_runs'."
             assert N_tasks >= 1, "'N_tasks' has to be one or greater than one."
 
             job_index = (largest_existing_job_index(parallel_average_path) or 0) + 1
             job_name = f"{job_index}_{function.__name__}"
-            job_path = parallel_average_path / job_name
-            input_path = job_path / "input"
-            input_path.mkdir(parents=True, exist_ok=True)
+            job_path = JobPath(parallel_average_path / job_name)
 
             if dynamic_load_balancing:
-                N_static_runs = setup_dynamic_load_balancing(N_runs, N_tasks, input_path)
+                N_static_runs = setup_dynamic_load_balancing(N_runs, N_tasks, job_path.input_path)
             else:
                 N_static_runs = None
 
+            if action == actions.re_submit:
+                run_ids_map = prepare_re_submission(entry, job_path, N_tasks)
+                num_tasks = len(run_ids_map)
+            else:
+                run_ids_map = None
+                num_tasks = N_tasks
+
             setup_task_input_data(
-                job_name, input_path, N_runs, N_tasks, average_results, save_interpreter_state,
+                job_name, job_path.input_path, N_runs, num_tasks, average_results, save_interpreter_state,
                 dynamic_load_balancing, N_static_runs, keep_runs,
-                function, args, kwargs, encoding
+                function, args, kwargs, encoding, run_ids_map
             )
 
             queuing_system_module.submit(
-                N_tasks, job_name, job_path, queuing_system_options
+                num_tasks, job_name, job_path, queuing_system_options
             )
 
-            new_entry["output"] = str((job_path / "output.json").relative_to(path))
-            new_entry["job_name"] = job_name
-            new_entry["status"] = "running"
-            new_entry["datetime"] = datetime.now().isoformat()
-            new_entry.save(database_path)
+            new_entry.update(dict(
+                output=str((job_path / "output.json").relative_to(path)),
+                job_name=job_name,
+                status="running",
+                datetime=datetime.now().isoformat()
+            ))
+            new_entry.save()
 
             if action == actions.do_submit:
                 cleanup(path=path)
@@ -358,6 +241,15 @@ def dont_submit(wrapper):
     @wraps(wrapper)
     def f(*args, **kwargs):
         kwargs[action_argname] = actions.dont_submit
+        return wrapper(*args, **kwargs)
+
+    return f
+
+
+def re_submit(wrapper):
+    @wraps(wrapper)
+    def f(*args, **kwargs):
+        kwargs[action_argname] = actions.re_submit
         return wrapper(*args, **kwargs)
 
     return f

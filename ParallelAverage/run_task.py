@@ -47,6 +47,15 @@ with open(input_dir / "run_task_arguments.json", 'r') as f:
     N_static_runs = parameters["N_static_runs"]
     keep_runs = parameters["keep_runs"]
     encoding = parameters["encoding"]
+    new_task_ids = parameters["new_task_ids"]
+    run_ids_map = (
+        {int(k): v for k, v in parameters["run_ids_map"].items()}
+        if parameters["run_ids_map"] is not None else None
+    )
+
+
+if new_task_ids is not None:
+    task_id = new_task_ids[task_id - 1]
 
 with open(input_dir / "run_task.d", 'rb') as f:
     run_task = dill.load(f)
@@ -88,7 +97,9 @@ def linear_run_ids():
 
 
 def run_ids():
-    if isinstance(N_runs, int):
+    if run_ids_map is not None:
+        yield from (repr(run_id) for run_id in run_ids_map[task_id])
+    elif isinstance(N_runs, int):
         yield from (repr(run_id) for run_id in linear_run_ids())
     else:
         ranges = [range(n_i) for n_i in N_runs]

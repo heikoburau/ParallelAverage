@@ -1,14 +1,9 @@
 from .CollectiveResult import CollectiveResult
-from .json_numpy import NumpyDecoder
 from copy import deepcopy
-import json
 
 
-def load_averaged_result(database_entry, path, encoding):
-    output_path = database_entry.output_path(path)
-
-    with open(output_path) as f:
-        output = json.load(f, cls=NumpyDecoder)
+def load_averaged_result(database_entry, encoding):
+    output = database_entry.output
 
     return AveragedResult(
         output["result"],
@@ -18,7 +13,7 @@ def load_averaged_result(database_entry, path, encoding):
         output["failed_runs"],
         CollectiveResult(
             output["successful_runs"],
-            output_path.parent,
+            database_entry.job_path,
             output["raw_results_map"],
             database_entry["job_name"],
             encoding

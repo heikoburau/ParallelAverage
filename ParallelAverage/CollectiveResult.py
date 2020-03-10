@@ -3,15 +3,12 @@ import json
 import pickle
 
 
-def load_collective_result(database_entry, path, encoding):
-    output_path = database_entry.output_path(path)
-
-    with open(output_path) as f:
-        output = json.load(f)
+def load_collective_result(database_entry, encoding):
+    output = database_entry.output
 
     return CollectiveResult(
         output["successful_runs"],
-        output_path.parent,
+        database_entry.job_path,
         output["raw_results_map"],
         database_entry["job_name"],
         encoding
@@ -38,7 +35,7 @@ class CollectiveResult:
             run_id = repr(run_id)
 
         file_id = self.raw_results_map[run_id]
-        file_path = self.job_path / "data_output" / f"{file_id}_raw_results.{self.encoding}"
+        file_path = self.job_path.data_path / f"{file_id}_raw_results.{self.encoding}"
 
         if self.encoding == "json":
             with open(file_path) as f:

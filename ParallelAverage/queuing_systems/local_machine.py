@@ -47,4 +47,4 @@ def print_job_output(job_path):
 
 
 def cancel_job(job_name):
-    raise NotImplementedError("[ParallelAverage] cancelling a process on the local machine is not yet supported. Please do manually.")
+    print("[ParallelAverage] cancelling a process on the local machine is not yet supported. Please do manually.")
