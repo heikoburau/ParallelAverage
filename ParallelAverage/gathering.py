@@ -103,7 +103,7 @@ class Gatherer:
         ]
 
         largest_task_id = max(int(re.search(r"\d+", task_file.name).group()) for task_file in self.task_files)
-        with open(self.data_path / f"{largest_task_id + 1}_task_output.json", 'w') as f:
+        with open(self.data_path / f"{largest_task_id + 100000}_task_output.json", 'w') as f:
             json.dump(
                 dict(done=True, **self.combined_task),
                 f,
