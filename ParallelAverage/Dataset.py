@@ -79,10 +79,12 @@ class Dataset:
     @staticmethod
     def from_json(obj):
         result = Dataset()
-        result.data = decode_array(obj["data"])
-        result.data_squared = decode_array(obj["data_squared"])
-        result.total_weight = obj["total_weight"]
-        result.num_samples = obj["num_samples"]
+        result.data = decode_array(obj["data"]) if "dtype" not in obj else decode_array(obj)
+        result.data_squared = decode_array(obj["data_squared"]) if "data_squared" in obj else (
+            abs(np.array(result.data))**2
+        )
+        result.total_weight = obj["total_weight"] if "total_weight" in obj else 1
+        result.num_samples = obj["num_samples"] if "num_samples" in obj else 1
         return result
 
 

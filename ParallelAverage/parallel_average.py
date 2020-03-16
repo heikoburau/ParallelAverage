@@ -194,7 +194,7 @@ def parallel_average(
             ))
             new_entry.save()
 
-            if action == actions.do_submit:
+            if action in (actions.do_submit, actions.re_submit):
                 cleanup(path=path)
 
         return wrapper

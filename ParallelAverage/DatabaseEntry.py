@@ -55,7 +55,10 @@ class DatabaseEntry(dict):
     @property
     def output(self):
         with open(self.output_path) as f:
-            return json.load(f, cls=NumpyDecoder)
+            result = json.load(f, cls=NumpyDecoder)
+            if "successful_runs" not in result:
+                result["successful_runs"] = [0] * result["N_total_runs"]
+            return result
 
     def check_result(self):
         output = self.output
@@ -69,9 +72,9 @@ class DatabaseEntry(dict):
                 f"{output['error_message']['message']}"
             )
 
-        num_still_running = volume(self["N_runs"]) - num_finished_runs
-        if num_still_running > 0:
-            print(f"[ParallelAverage] Warning: {num_still_running} / {volume(self['N_runs'])} runs are not ready yet!")
+        self["N_not_ready"] = volume(self["N_runs"]) - num_finished_runs
+        if self["N_not_ready"] > 0:
+            print(f"[ParallelAverage] Warning: {self['N_not_ready']} / {volume(self['N_runs'])} runs are not ready yet!")
         elif self["status"] == "running":
             self["status"] = "completed"
             self.save()

@@ -17,8 +17,7 @@ class Gatherer:
         self.database_entry = database_entry
         self.job_path = database_entry.job_path
         self.total_task = Task(self.database_entry)
-        self.partial_task = Task(self.database_entry)
-        self.partial_task.done = True
+        self.partial_task = Task(self.database_entry, done=True)
         self.average_results = database_entry["average_results"]
 
     def run(self):

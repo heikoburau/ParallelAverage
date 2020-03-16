@@ -13,7 +13,13 @@ class JobPath:
 
     @property
     def task_output_files(self):
-        return [t for t in self.data_path.iterdir() if str(t).endswith("_task_output.json")]
+        # legacy
+        yield from (
+            t / f"output_{t.name}.json" for t in self.iterdir()
+            if t.is_dir() and t.name.isdigit() and (t / f"output_{t.name}.json").exists()
+        )
+
+        yield from (t for t in self.data_path.iterdir() if str(t).endswith("_task_output.json"))
 
     @property
     def task_ids(self):

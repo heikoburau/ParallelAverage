@@ -6,8 +6,8 @@ import json
 
 
 class Task:
-    def __init__(self, database_entry):
-        self.done = False
+    def __init__(self, database_entry, done=False):
+        self.done = done
         self.successful_runs = []
         self.failed_runs = []
         self.error_message = {}
@@ -54,11 +54,11 @@ class Task:
             with open(task_output_path, 'r') as f:
                 output = json.load(f)
 
-        self.done = output["done"]
-        self.successful_runs = output["successful_runs"]
+        self.done = output["done"] if hasattr(output, "done") else True
+        self.successful_runs = output["successful_runs"] if "successful_runs" in output else [0] * output["N_local_runs"]
         self.failed_runs = output["failed_runs"]
         self.error_message = output["error_message"]
-        self.raw_results_map = output["raw_results_map"]
+        self.raw_results_map = output["raw_results_map"] if "raw_results_map" in output else {}
         self.task_result = defaultdict(lambda: Dataset())
         for i, r in enumerate(output["task_result"]):
             if self.to_be_averaged(i):
