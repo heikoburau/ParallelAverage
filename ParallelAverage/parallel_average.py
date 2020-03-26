@@ -134,17 +134,15 @@ def parallel_average(
                     cleanup(path=path)
                     return
                 elif action == actions.re_submit:
-                    if entry["status"] != "completed":
-                        gather(entry)
+                    entry.check_result()
                     if len(entry.output["successful_runs"]) == volume(entry["N_runs"]):
                         raise ValueError("All runs have finished successfully. No need for re-submitting job.")
                     queuing_system_module.cancel_job(entry["job_name"])
                 elif action == actions.default and "entry" not in locals():
                     pass
                 else:
-                    if entry["status"] != "completed":
-                        gather(entry)
-                    entry.check_result()
+                    if not entry.check_result():
+                        return
 
                     if entry["average_results"] is None:
                         return load_collective_result(entry, encoding)

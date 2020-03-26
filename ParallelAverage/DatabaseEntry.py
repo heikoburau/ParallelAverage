@@ -1,8 +1,11 @@
 from .JobPath import JobPath
 from .json_numpy import NumpyEncoder, NumpyDecoder
+from .gathering import gather
 from .simpleflock import SimpleFlock
 from copy import deepcopy
 from pathlib import Path
+from datetime import datetime, timedelta
+import dateutil.parser
 import json
 
 
@@ -62,21 +65,42 @@ class DatabaseEntry(dict):
 
     def check_result(self):
         output = self.output
+        needs_update = False
+
+        if self["status"] != "completed":
+            gather(self)
 
         num_finished_runs = len(output["successful_runs"]) + len(output["failed_runs"])
 
         if output["failed_runs"]:
-            print(
-                f"[ParallelAverage] Warning: {len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
-                f"[ParallelAverage] Error message of run {output['error_message']['run_id']}:\n\n"
-                f"{output['error_message']['message']}"
-            )
+            # legacy
+            if isinstance(output["error_message"], str):
+                print(
+                    f"[ParallelAverage] Warning: {len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
+                    # f"[ParallelAverage] Error message of run {output['run_id']}:\n\n"
+                    # f"{output['error_message']['message']}"
+                )
+            else:
+                print(
+                    f"[ParallelAverage] Warning: {len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
+                    f"[ParallelAverage] Error message of run {output['error_message']['run_id']}:\n\n"
+                    f"{output['error_message']['message']}"
+                )
+            if "N_failed" not in self or len(output["failed_runs"]) != self["N_failed"]:
+                self["N_failed"] = len(output["failed_runs"])
+                needs_update = True
 
-        self["N_not_ready"] = volume(self["N_runs"]) - num_finished_runs
+        if "N_not_ready" not in self or volume(self["N_runs"]) - num_finished_runs != self["N_not_ready"]:
+            self["N_not_ready"] = volume(self["N_runs"]) - num_finished_runs
+            needs_update = True
+
         if self["N_not_ready"] > 0:
             print(f"[ParallelAverage] Warning: {self['N_not_ready']} / {volume(self['N_runs'])} runs are not ready yet!")
         elif self["status"] == "running":
             self["status"] = "completed"
+            needs_update = True
+
+        if needs_update:
             self.save()
 
         return len(output["successful_runs"]) > 0
@@ -153,7 +177,7 @@ def load_database(database_path):
             else:
                 entries = json.load(f)
 
-    return [DatabaseEntry(entry, database_path) for entry in entries]
+    return (DatabaseEntry(entry, database_path) for entry in entries)
 
 
 def volume(x):
@@ -164,3 +188,14 @@ def volume(x):
     for x_i in x:
         result *= x_i
     return result
+
+
+def check_latest_jobs(path='.', weeks=1, days=0):
+    since = datetime.now() - timedelta(weeks=weeks) - timedelta(days=days)
+    latest_entries = (
+        entry for entry in load_database(Path(path) / "parallel_average_database.json")
+        if "datetime" in entry and dateutil.parser.parse(entry["datetime"]) > since
+    )
+    for entry in latest_entries:
+        print(f"[ParallelAverage] Info: checking {entry['job_name']}")
+        entry.check_result()
