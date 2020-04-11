@@ -64,11 +64,11 @@ class DatabaseEntry(dict):
             return result
 
     def check_result(self):
-        output = self.output
-        needs_update = False
-
         if self["status"] != "completed":
             gather(self)
+
+        output = self.output
+        needs_update = False
 
         num_finished_runs = len(output["successful_runs"]) + len(output["failed_runs"])
 

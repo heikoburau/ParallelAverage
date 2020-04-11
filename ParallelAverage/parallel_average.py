@@ -1,6 +1,5 @@
 from .prepare_submission import setup_task_input_data, setup_dynamic_load_balancing
 from .DatabaseEntry import DatabaseEntry, load_database
-from .gathering import gather
 from .AveragedResult import load_averaged_result
 from .CollectiveResult import load_collective_result
 from .JobPath import JobPath
@@ -110,11 +109,11 @@ def parallel_average(
                 database_path
             )
 
-            if action != actions.do_submit and database_path.stat().st_size > 0:
+            if database_path.stat().st_size > 0:
                 try:
                     entry = next(entry for entry in load_database(database_path) if entry == new_entry)
                 except StopIteration:
-                    if action != actions.default:
+                    if action not in (actions.default, actions.do_submit):
                         best_fits_str = ""
                         for best_fit in new_entry.best_fitting_entries_in_database:
                             best_fits_str += str(best_fit) + "\n\n"
@@ -140,6 +139,12 @@ def parallel_average(
                     queuing_system_module.cancel_job(entry["job_name"])
                 elif action == actions.default and "entry" not in locals():
                     pass
+                elif action == actions.do_submit:
+                    try:
+                        queuing_system_module.cancel_job(entry["job_name"])
+                        entry.remove()
+                    except NameError:
+                        pass
                 else:
                     if not entry.check_result():
                         return
@@ -151,9 +156,6 @@ def parallel_average(
 
             if action not in (actions.default, actions.do_submit, actions.re_submit):
                 raise EntryDoesNotExist()
-
-            if action == actions.do_submit and "entry" in locals():
-                queuing_system_module.cancel_job(entry["job_name"])
 
             assert N_tasks <= volume(N_runs), "'N_tasks' has to be less than or equal to 'N_runs'."
             assert N_tasks >= 1, "'N_tasks' has to be one or greater than one."
