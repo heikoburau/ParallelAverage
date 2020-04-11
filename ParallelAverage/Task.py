@@ -54,7 +54,7 @@ class Task:
             with open(task_output_path, 'r') as f:
                 output = json.load(f)
 
-        self.done = output["done"] if hasattr(output, "done") else True
+        self.done = output["done"] if ("done" in output) else True
         self.successful_runs = output["successful_runs"] if "successful_runs" in output else [0] * output["N_local_runs"]
         self.failed_runs = output["failed_runs"]
         self.error_message = output["error_message"]
