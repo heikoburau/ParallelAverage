@@ -45,7 +45,7 @@ def largest_existing_job_index(parallel_average_path):
     return max(int(re.search(r"\d+", dir_str).group()) for dir_str in dirs_starting_with_a_number)
 
 
-def load_job_name(job_name, path, encoding="json"):
+def load_job_name(job_name, path=".", encoding="json"):
     database_path = Path(path) / "parallel_average_database.json"
     try:
         entry = next(entry for entry in load_database(database_path) if entry["job_name"] == job_name)
