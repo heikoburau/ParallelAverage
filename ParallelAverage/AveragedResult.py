@@ -1,5 +1,7 @@
 from .CollectiveResult import CollectiveResult
+from .json_numpy import NumpyEncoder, NumpyDecoder
 from copy import deepcopy
+import json
 
 
 def load_averaged_result(database_entry, encoding):
@@ -48,6 +50,29 @@ class AveragedResult:
             self.failed_run_ids,
             self.runs,
             self.job_name
+        )
+
+    def to_json(self):
+        return dict(
+            data=json.loads(json.dumps(self.data, cls=NumpyEncoder)),
+            estimated_error=json.loads(json.dumps(self.estimated_error, cls=NumpyEncoder)),
+            estimated_variance=json.loads(json.dumps(self.estimated_variance, cls=NumpyEncoder)),
+            successful_run_ids=self.successful_run_ids,
+            failed_run_ids=self.failed_run_ids,
+            runs=None,
+            job_name=self.job_name
+        )
+
+    @staticmethod
+    def from_json(obj):
+        return AveragedResult(
+            json.loads(json.dumps(obj["data"]), cls=NumpyDecoder),
+            json.loads(json.dumps(obj["estimated_error"]), cls=NumpyDecoder),
+            json.loads(json.dumps(obj["estimated_variance"]), cls=NumpyDecoder),
+            obj["successful_run_ids"],
+            obj["failed_run_ids"],
+            None,
+            obj["job_name"]
         )
 
     def __str__(self):

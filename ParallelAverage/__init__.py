@@ -3,6 +3,7 @@ from .Dataset import WeightedSample, Dataset
 from .DatabaseEntry import check_latest_jobs
 from .simpleflock import SimpleFlock
 from .json_numpy import NumpyEncoder
+from .AveragedResult import AveragedResult
 
 __all__ = [
     "parallel_average",
@@ -16,5 +17,6 @@ __all__ = [
     "plot_average",
     "WeightedSample",
     "load_job_name",
-    "check_latest_jobs"
+    "check_latest_jobs",
+    "AveragedResult"
 ]

@@ -46,11 +46,12 @@ def largest_existing_job_index(parallel_average_path):
 
 
 def load_job_name(job_name, path=".", encoding="json"):
-    database_path = Path(path) / "parallel_average_database.json"
+    path = Path(path)
+    database_path = path / "parallel_average_database.json"
     try:
         entry = next(entry for entry in load_database(database_path) if entry["job_name"] == job_name)
     except StopIteration:
-        raise EntryDoesNotExist(f"'{job_name}' was not found in {path}")
+        raise EntryDoesNotExist(f"'{job_name}' was not found in {path.resolve()}")
 
     if entry.check_result():
         if entry["average_results"] is None:
@@ -319,11 +320,12 @@ def cleanup(
 
 
 def plot_average(
-    x, average, label=None, color=0, points=False, linestyle="-", alpha=None, cmap="CMRmap_r",
-    estimated_error=None
+    x, average, label=None, color=0, points=False, linestyle="-", alpha=None, marker=None, cmap="CMRmap_r",
+    estimated_error=None, ax=None, **kwargs
 ):
-    import matplotlib.pyplot as plt
     import numpy as np
+    if ax is None:
+        import matplotlib.pyplot as ax
 
     if type(color) is int:
         color = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink"][color]
@@ -335,7 +337,7 @@ def plot_average(
         estimated_error = average.estimated_error if hasattr(average, "estimated_error") else np.zeros_like(x)
 
     if points:
-        plt.errorbar(
+        ax.errorbar(
             x,
             average.data if hasattr(average, "data") else average,
             yerr=estimated_error,
@@ -343,11 +345,12 @@ def plot_average(
             linestyle="None",
             color=color,
             label=label,
-            alpha=alpha
+            alpha=alpha,
+            **kwargs
         )
     else:
-        plt.plot(x, average, label=label, color=color, linestyle=linestyle, alpha=alpha)
-        plt.fill_between(
+        ax.plot(x, average, label=label, color=color, linestyle=linestyle, alpha=alpha, marker=marker, **kwargs)
+        ax.fill_between(
             x,
             +average - estimated_error,
             +average + estimated_error,
