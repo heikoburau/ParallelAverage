@@ -4,6 +4,7 @@ from .DatabaseEntry import check_latest_jobs
 from .simpleflock import SimpleFlock
 from .json_numpy import NumpyEncoder
 from .AveragedResult import AveragedResult
+from .bundling import bundle_job, unbundle_job
 
 __all__ = [
     "parallel_average",
@@ -18,5 +19,7 @@ __all__ = [
     "WeightedSample",
     "load_job_name",
     "check_latest_jobs",
-    "AveragedResult"
+    "AveragedResult",
+    "bundle_job",
+    "unbundle_job"
 ]

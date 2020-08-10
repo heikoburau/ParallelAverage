@@ -212,6 +212,8 @@ def parallel(
     queuing_system="Slurm",
     **queuing_system_options
 ):
+    """Decorator for
+    """
     def decorator(function):
         return parallel_average(
             N_runs,

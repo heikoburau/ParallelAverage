@@ -10,8 +10,15 @@ import json
 
 
 class DatabaseEntry(dict):
-    def __init__(self, input_dict, database_path):
+    def __init__(self, input_dict, path):
         super().__init__(deepcopy(input_dict))
+
+        path = Path(path)
+        if path.name.endswith("parallel_average_database.json"):
+            self.database_path = path
+        else:
+            self.database_path = path / "parallel_average_database.json"
+
         # convert fields to a genuine json objects
         self["N_runs"] = json.loads(
             json.dumps(self["N_runs"])
@@ -22,7 +29,6 @@ class DatabaseEntry(dict):
         self["kwargs"] = json.loads(
             json.dumps(self["kwargs"], cls=NumpyEncoder),
         )
-        self.database_path = database_path
 
     def __eq__(self, other):
         try:
@@ -77,8 +83,6 @@ class DatabaseEntry(dict):
             if isinstance(output["error_message"], str):
                 print(
                     f"[ParallelAverage] Warning: {len(output['failed_runs'])} / {num_finished_runs} runs failed!\n"
-                    # f"[ParallelAverage] Error message of run {output['run_id']}:\n\n"
-                    # f"{output['error_message']['message']}"
                 )
             else:
                 print(
@@ -168,8 +172,31 @@ class DatabaseEntry(dict):
         result += sum(1 if kwargsA[key] != kwargsB[key] else 0 for key in set(kwargsA) & set(kwargsB))
         return result
 
+    @classmethod
+    def from_job_name(cls, job_name, path="."):
+        path = Path(path)
+        database_path = path / "parallel_average_database.json"
+        with SimpleFlock(str(database_path.parent / "dblock")):
+            with database_path.open() as f:
+                if database_path.stat().st_size == 0:
+                    raise ValueError(f"[ParallelAverage] Database at {database_path.resolve()} is empty.")
+                else:
+                    entries = json.load(f)
 
-def load_database(database_path):
+        for entry in entries:
+            if entry["job_name"] == job_name:
+                return cls(entry, database_path)
+
+        raise ValueError(f"[ParallelAverage] Couldn't find job {job_name} in database at {database_path.resolve()}")
+
+
+def load_database(path):
+    path = Path(path)
+    if path.name.endswith("parallel_average_database.json"):
+        database_path = path
+    else:
+        database_path = path / "parallel_average_database.json"
+
     with SimpleFlock(str(database_path.parent / "dblock")):
         with database_path.open() as f:
             if database_path.stat().st_size == 0:
