@@ -38,20 +38,25 @@ to_be_averaged = lambda i: average_results is not None and (average_results == '
 
 with open(input_dir / "run_task_arguments.json", 'r') as f:
     parameters = json.load(f)
-    job_name = parameters["job_name"]
-    N_runs = parameters["N_runs"]
-    N_tasks = parameters["N_tasks"]
-    average_results = parameters["average_results"]
-    save_interpreter_state = parameters["save_interpreter_state"]
-    dynamic_load_balancing = parameters["dynamic_load_balancing"]
-    N_static_runs = parameters["N_static_runs"]
-    keep_runs = parameters["keep_runs"]
-    encoding = parameters["encoding"]
-    new_task_ids = parameters["new_task_ids"]
-    run_ids_map = (
-        {int(k): v for k, v in parameters["run_ids_map"].items()}
-        if parameters["run_ids_map"] is not None else None
-    )
+
+if parameters["save_interpreter_state"]:
+    dill.load_session(str(input_dir / "session.pkl"))
+
+
+job_name = parameters["job_name"]
+N_runs = parameters["N_runs"]
+N_tasks = parameters["N_tasks"]
+average_results = parameters["average_results"]
+save_interpreter_state = parameters["save_interpreter_state"]
+dynamic_load_balancing = parameters["dynamic_load_balancing"]
+N_static_runs = parameters["N_static_runs"]
+keep_runs = parameters["keep_runs"]
+encoding = parameters["encoding"]
+new_task_ids = parameters["new_task_ids"]
+run_ids_map = (
+    {int(k): v for k, v in parameters["run_ids_map"].items()}
+    if parameters["run_ids_map"] is not None else None
+)
 
 
 if new_task_ids is not None:
@@ -65,9 +70,6 @@ args = run_task["args"]
 kwargs = run_task["kwargs"]
 
 os.environ["JOB_NAME"] = job_name
-
-if save_interpreter_state:
-    dill.load_session(str(input_dir / "session.pkl"))
 
 
 def linear_run_ids():
