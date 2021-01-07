@@ -343,7 +343,7 @@ def plot_average(
             x,
             average.data if hasattr(average, "data") else average,
             yerr=estimated_error,
-            marker="o",
+            marker="o" if marker is None else marker,
             linestyle="None",
             color=color,
             label=label,

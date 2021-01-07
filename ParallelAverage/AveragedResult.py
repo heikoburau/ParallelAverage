@@ -82,10 +82,10 @@ class AveragedResult:
         return repr(self.data) + " +/- " + repr(self.estimated_error)
 
     def __getstate__(self):
-        return False
+        return self.to_json()
 
     def __setstate__(self, state):
-        pass
+        self.__dict__.update(AveragedResult.from_json(state).__dict__)
 
     def __getattr__(self, name):
         return getattr(self.data, name)
