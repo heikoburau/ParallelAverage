@@ -37,8 +37,7 @@ def submit(N_tasks, job_name, job_path, user_options):
     run([
         "sbatch",
         f"{job_path}/job_script_slurm.sh",
-        f"{package_path}/run_task.py",
-        str(Path(".").resolve())
+        f"{package_path}/run_task.py"
     ])
 
     print("[ParallelAverage] submitting job-array", job_name)

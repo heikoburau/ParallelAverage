@@ -8,6 +8,4 @@ module load intelpython3
 
 WORK_DIR=`pwd`
 RUN_TASK_PY=$1
-CALLER_DIR=$2
-cd $CALLER_DIR
 python $RUN_TASK_PY $SLURM_ARRAY_TASK_ID $WORK_DIR
