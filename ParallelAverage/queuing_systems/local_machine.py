@@ -17,7 +17,8 @@ def run_task(python, task_id, job_path):
                 str(job_path.resolve())
             ],
             stdout=f,
-            stderr=STDOUT
+            stderr=STDOUT,
+            cwd=job_path
         )
 
 
@@ -29,7 +30,7 @@ def submit(N_tasks, job_name, job_path, user_options):
         Process(
             name=job_name + f"_{task_id}",
             target=run_task,
-            args=(user_options.get("python", "python3"), task_id, job_path),
+            args=(user_options.get("executable", "python"), task_id, job_path),
             daemon=True
         ).start()
 
