@@ -64,7 +64,8 @@ forecast = weather_fluid_simulation(
 ParallelAverage - Browser
 =========================
 
-Web based User interface for intuitive browsing of ParallelAverage databases.
+[Web based User interface](https://heikoburau.github.io/ParallelAverage-browser) for intuitive browsing of ParallelAverage databases.
 
-![pae](https://user-images.githubusercontent.com/5159590/146451803-7ad4ec0f-cde8-40d6-95e3-50c5c9bad559.png)
+![pae_sm](https://user-images.githubusercontent.com/5159590/146452679-5cc9b054-3767-483e-bca2-83eadf958bbb.png)
+
 
