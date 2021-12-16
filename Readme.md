@@ -1,7 +1,7 @@
 ParallelAverage
 ===============
 
-Facilitates the full workflow of high performance computing (HPC) for Python users, preferably in an interactive environment such as the [jupyter-notebook](https://jupyter.org/).
+Facilitates the full workflow of high performance computing (HPC) for Python Users, preferably in an interactive environment such as the [jupyter-notebook](https://jupyter.org/).
 
 It basically transforms a python function, which does the computation, into a [SLURM](https://slurm.schedmd.com/) batch script, submits it to the cluster and eventually saves all results of the job into a database.
 Whenever the same function is called again with the same arguments, the pre-calculated results are returned immediately from the database.
@@ -60,4 +60,11 @@ forecast = weather_fluid_simulation(
     other_parameters={"add_initial_random_noise": True}
 )
 ```
+
+ParallelAverage - Browser
+=========================
+
+Web based User interface for intuitive browsing of ParallelAverage databases.
+
+![pae](https://user-images.githubusercontent.com/5159590/146451803-7ad4ec0f-cde8-40d6-95e3-50c5c9bad559.png)
 
