@@ -68,7 +68,7 @@ Features
 --------
 
 - Any custom keyword arguments are put as SLURM parameters within the internal batch file. This way, users have full control over hardware requirements, partitions, wall time, etc.
-- Optional, basic statistical functionality available, such as average, variance, stat. error, ...
+- Includes basic statistical functionality as an option, such as average, variance, statistical error, ...
 - Intermediate results are available at any point in time.
 - Fine control over job management with the help of additional decorators, such as `@dont_submit, @do_submit, @cancel_job, ...`.
 - Supports both JSON and binary output data formats.
