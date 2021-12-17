@@ -5,7 +5,7 @@ Facilitates the full workflow of high performance computing (HPC) for Python Use
 
 It basically converts a Python function call that performs the calculation into a [SLURM](https://slurm.schedmd.com/) batch script, sends it to the cluster, and finally stores all the results of the job in a database.
 Whenever the same function is called again with the same arguments, the pre-calculated results are returned immediately from the database.
-From the user's perspective, all functionality is contained in a single function call.
+From the User's perspective, all functionality is contained in a single function call.
 
 Example
 -------
@@ -77,7 +77,7 @@ Features
 ParallelAverage - Browser
 -------------------------
 
-ParallelAverage comes with its own [web based User interface](https://heikoburau.github.io/ParallelAverage-browser) for an intuitive browsing of its databases. It helps Users to keep track of a growing number of function calls / SLURM-jobs.
+ParallelAverage comes with its own [web based User interface](https://heikoburau.github.io/ParallelAverage-browser) for an intuitive browsing of its databases. It helps users to keep track of a growing number of function calls / SLURM-jobs.
 Check out the repository [here](https://github.com/heikoburau/ParallelAverage-browser).
 
 ![pae_sm](https://user-images.githubusercontent.com/5159590/146452679-5cc9b054-3767-483e-bca2-83eadf958bbb.png)
