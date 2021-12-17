@@ -62,7 +62,7 @@ forecast = weather_fluid_simulation(
 ```
 
 - If different parameters are used, a new job will be submitted and a new entry will be put in the database. 
-- For each job, a new folder under the path given by the `path` argument will be created, where all data is stored and can be manually accessed if needed.
+- For each job, a new folder under the path given by the `path` argument will be created, where all data is stored in regular files and can be manually accessed if needed.
 
 Features
 --------
