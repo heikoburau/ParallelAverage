@@ -64,7 +64,12 @@ forecast = weather_fluid_simulation(
 Features
 ========
 
-- 
+- Custom keyword arguements are automatically forwarded as SLURM parameters in the batch file
+- Basic statistical functionality for most common use-cases included (average, variance, stat. error, ...)
+- Intermediate results are available at any point in time
+- Fine control over job management with the help of additional decorators, such as `@dont_submit, @do_submit, @cancel_job, ...`.
+- Supports both JSON and binary output data formats
+- Supports re-submission of broken or partly failed jobs
 
 ParallelAverage - Browser
 =========================
