@@ -8,7 +8,7 @@ Whenever the same function is called again with the same arguments, the pre-calc
 From the user's perspective, all functionality is contained in a single function call.
 
 Example
-=======
+-------
 
 Without ParallelAverage:
 
@@ -62,7 +62,7 @@ forecast = weather_fluid_simulation(
 ```
 
 Features
-========
+--------
 
 - Custom keyword arguments are automatically forwarded as SLURM parameters within internal batch file.
 - Basic statistical functionality included, such as average, variance, stat. error, ...
@@ -73,7 +73,7 @@ Features
 - Fallback for utilizing only the local machine by spawning multiple processes instead of submitting a job.
 
 ParallelAverage - Browser
-=========================
+-------------------------
 
 ParallelAverage comes with its own [web based User interface](https://heikoburau.github.io/ParallelAverage-browser) for an intuitive browsing of its databases. It helps to keep track of a growing number of function calls / SLURM-jobs.
 Check out the repository [here](https://github.com/heikoburau/ParallelAverage-browser).
