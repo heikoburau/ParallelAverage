@@ -77,7 +77,7 @@ Features
 ParallelAverage - Browser
 -------------------------
 
-ParallelAverage comes with its own [web based User interface](https://heikoburau.github.io/ParallelAverage-browser) for an intuitive browsing of its databases. It helps to keep track of a growing number of function calls / SLURM-jobs.
+ParallelAverage comes with its own [web based User interface](https://heikoburau.github.io/ParallelAverage-browser) for an intuitive browsing of its databases. It helps Users to keep track of a growing number of function calls / SLURM-jobs.
 Check out the repository [here](https://github.com/heikoburau/ParallelAverage-browser).
 
 ![pae_sm](https://user-images.githubusercontent.com/5159590/146452679-5cc9b054-3767-483e-bca2-83eadf958bbb.png)
