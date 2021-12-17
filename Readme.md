@@ -61,6 +61,8 @@ forecast = weather_fluid_simulation(
 )
 ```
 
+When different parameters are used, a new job will be submitted.
+
 Features
 --------
 
