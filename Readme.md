@@ -61,7 +61,7 @@ forecast = weather_fluid_simulation(
 )
 ```
 
-If different parameters are used, a new job will be submitted.
+If different parameters are used, a new job will be submitted together with a new entry in the database. 
 
 Features
 --------
