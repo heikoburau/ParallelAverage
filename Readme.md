@@ -70,6 +70,7 @@ Features
 - Fine control over job management with the help of additional decorators, such as `@dont_submit, @do_submit, @cancel_job, ...`.
 - Supports both JSON and binary output data formats.
 - Supports re-submission of broken or partly failed jobs.
+- Fallback for utilizing only the local machine by spawning multiple processes instead of submitting a job.
 
 ParallelAverage - Browser
 =========================
