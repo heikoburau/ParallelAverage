@@ -66,7 +66,7 @@ If different parameters are used, a new job will be submitted and a new entry wi
 Features
 --------
 
-- Custom keyword arguments are automatically forwarded as SLURM parameters within internal batch file.
+- Any custom keyword arguments are put as SLURM parameters within internal batch file.
 - Basic statistical functionality included, such as average, variance, stat. error, ...
 - Intermediate results are available at any point in time.
 - Fine control over job management with the help of additional decorators, such as `@dont_submit, @do_submit, @cancel_job, ...`.
