@@ -68,7 +68,7 @@ forecast = weather_fluid_simulation(
 Features
 --------
 
-- Custom keyword arguments are translated as SLURM-parameters within an internal batch file. This way, users have full control over hardware requirements, partitions, wall time, etc.
+- Custom keyword arguments are translated into SLURM-parameters for an internal batch file. This way, users have full control over hardware requirements, partitions, wall time, etc.
 - Basic statistical functionality such as average, variance, statistical error, ... included.
 - Intermediate results are available at any point in time. Users don't have to wait until the job has finished.
 - Convenient additional decorators such as `@dont_submit, @do_submit, @cancel_job, ...`.
