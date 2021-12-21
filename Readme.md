@@ -71,7 +71,7 @@ Features
 - Custom keyword arguments are translated into SLURM-parameters for an internal batch file. This way, users have full control over hardware requirements, partitions, wall time, etc.
 - Basic statistical functionality such as average, variance, statistical error, ... included.
 - Intermediate results are available at any point in time. Users don't have to wait until the job has finished.
-- Additional decorators such as `@dont_submit, @do_submit, @cancel_job, ...` make job control more convenient.
+- Additional decorators such as `@dont_submit, @do_submit, @cancel_job, ...` for a convenient job control.
 - Supports both JSON and binary output data formats.
 - Re-submission of broken or partly failed jobs.
 - Fallback mode for utilizing only the local machine by spawning multiple processes instead of submitting a job.
