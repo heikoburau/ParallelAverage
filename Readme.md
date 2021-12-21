@@ -4,7 +4,7 @@ ParallelAverage
 Facilitates the full workflow of high performance computing (HPC) for Python Users, preferably in an interactive environment such as the [jupyter-notebook](https://jupyter.org/).
 
 It basically converts a Python function call that performs the calculation into a [SLURM](https://slurm.schedmd.com/) batch script, sends it to the cluster, and has all the results of the job written to the file system.
-Whenever the same function is called again with the same arguments, the pre-calculated results are returned immediately from the file system.
+Whenever the same function is called again with the same arguments, the pre-calculated results are returned directly from the file system.
 From the User's perspective, all functionality is contained in a single function call.
 
 Example
