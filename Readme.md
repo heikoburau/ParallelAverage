@@ -61,18 +61,18 @@ forecast = weather_fluid_simulation(
 )
 ```
 
-- If different parameters are used, a new job will be submitted and a new entry will be put in the database. 
-- For each job, a new folder under the path given by the `path` argument will be created, where all data is stored in regular files and can be manually accessed if needed.
+- If different parameters are used, a new job will be submitted and a new entry will be added to the database. 
+- For each job submission, a new folder below the path given by the `path` argument will be created, where all data is stored in regular files and can be manually accessed if needed.
 
 Features
 --------
 
-- Any custom keyword arguments are put as SLURM parameters within the internal batch file. This way, users have full control over hardware requirements, partitions, wall time, etc.
-- Includes basic statistical functionality as an option, such as average, variance, statistical error, ...
-- Intermediate results are available at any point in time.
-- Fine control over job management with the help of additional decorators, such as `@dont_submit, @do_submit, @cancel_job, ...`.
+- Custom keyword arguments are translated as SLURM-parameters within an internal batch file. This way, users have full control over hardware requirements, partitions, wall time, etc.
+- Basic statistical functionality such as average, variance, statistical error, ... included.
+- Intermediate results are available at any point in time. Users don't have to wait until the job has finished.
+- Convenient additional decorators such as `@dont_submit, @do_submit, @cancel_job, ...`.
 - Supports both JSON and binary output data formats.
-- Supports re-submission of broken or partly failed jobs.
+- Re-submission of broken or partly failed jobs.
 - Fallback mode for utilizing only the local machine by spawning multiple processes instead of submitting a job.
 - Basic dynamic load balancing.
 - Transfers the state of the Python interpreter to the cluster so that users can readily use global variables and packages in their code.
