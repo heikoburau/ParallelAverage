@@ -29,7 +29,7 @@ forecast = weather_fluid_simulation(
 )
 ```
 
-Now `weather_fluid_simulation` is turned into a SLURM-job:
+Now, `weather_fluid_simulation` is turned into a SLURM-job:
 
 ```python
 from ParallelAverage import parallel
