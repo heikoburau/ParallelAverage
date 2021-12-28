@@ -29,7 +29,7 @@ forecast = weather_fluid_simulation(
 )
 ```
 
-Now let's turn `weather_fluid_simulation` into a SLURM-job:
+Now `weather_fluid_simulation` is turned into a SLURM-job:
 
 ```python
 from ParallelAverage import parallel
@@ -81,7 +81,7 @@ Features
 ParallelAverage - Browser
 -------------------------
 
-ParallelAverage comes with its own [web based User interface](https://heikoburau.github.io/ParallelAverage-browser) for an intuitive browsing of its databases. It helps users to keep track of a growing number of function calls / SLURM-jobs.
+ParallelAverage comes with its own [web based User interface](https://heikoburau.github.io/ParallelAverage-browser) for an intuitive browsing of its databases. It helps users to keep track of a growing number of function calls / jobs.
 Check out the repository [here](https://github.com/heikoburau/ParallelAverage-browser).
 
 ![pae_sm](https://user-images.githubusercontent.com/5159590/146452679-5cc9b054-3767-483e-bca2-83eadf958bbb.png)
