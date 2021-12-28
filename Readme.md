@@ -3,7 +3,7 @@ ParallelAverage
 
 Facilitates the full workflow of high performance computing (HPC) for Python Users, preferably in an interactive environment such as the [jupyter-notebook](https://jupyter.org/).
 
-It basically converts a Python function call that performs the calculation into a [SLURM](https://slurm.schedmd.com/) batch script, sends it to the cluster, and has all the results of the job written to the file system.
+ParallelAverage converts a Python function, that performs a calculation, into a [SLURM](https://slurm.schedmd.com/) batch script, sends it to the cluster, and has all the results of the job written to the file system.
 Whenever the same function is called again with the same arguments, the pre-calculated results are directly returned from the file system.
 From the User's perspective, all functionality is contained in a single function call.
 
@@ -61,7 +61,7 @@ forecast = weather_fluid_simulation(
 )
 ```
 
-- If different arguments are used for `weather_fluid_simulation`, a new job will be submitted and a new entry will be added to a database. 
+- If different arguments are passed to `weather_fluid_simulation`, a new job will be submitted and a new entry will be added to a database. 
 - When a job is submitted, a new folder below the path given by the `path` argument will be created, where all data is stored in regular files and can be manually accessed if needed.
 - The database, which is a single JSON file, can also be found at the path given by the `path` argument.
 
