@@ -76,7 +76,7 @@ Features
 - Re-submission of broken or partly failed jobs.
 - Fallback mode for utilizing only the local machine by spawning multiple processes instead of submitting a job.
 - Basic dynamic load balancing.
-- Transfers the state of the Python interpreter to the cluster so that users can readily use global variables and packages in their code.
+- Transfers the state of the Python interpreter to the cluster thereby users can readily use global variables and packages in their code.
 
 ParallelAverage - Browser
 -------------------------
