@@ -48,7 +48,29 @@ def unbundle_job(filename, path=".", force=False):
     bundle_entry["output"] = f".parallel_average/{new_job_name}/output.json"
 
     with tarfile.open(filename, "r") as tar:
-        tar.extractall(str(new_job_path))
+        
+        import os
+        
+        def is_within_directory(directory, target):
+            
+            abs_directory = os.path.abspath(directory)
+            abs_target = os.path.abspath(target)
+        
+            prefix = os.path.commonprefix([abs_directory, abs_target])
+            
+            return prefix == abs_directory
+        
+        def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+        
+            for member in tar.getmembers():
+                member_path = os.path.join(path, member.name)
+                if not is_within_directory(path, member_path):
+                    raise Exception("Attempted Path Traversal in Tar File")
+        
+            tar.extractall(path, members, numeric_owner=numeric_owner) 
+            
+        
+        safe_extract(tar, str(new_job_path))
 
     DatabaseEntry(bundle_entry, path).save()
     print(f"[ParallelAverage] Successfully unbundled job. Added database entry {new_job_name}.")
